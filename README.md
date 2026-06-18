@@ -100,6 +100,14 @@ cicd-templates/
 
 ## Changelog
 
+### v1.0.3
+- feat: matrix builds in `python` template (3.11/3.12/3.13) with coverage artifact per version — closes #5
+- feat: matrix builds in `nodejs` template (Node 20/22/24) with coverage artifact per version — closes #5
+- feat: matrix example (commented) added to `generic` template — closes #5
+- feat: `python/release.yml` — semantic release via `python-semantic-release` — closes #6
+- feat: `nodejs/release.yml` — semantic release via `npx semantic-release` — closes #6
+- feat: `generic/release.yml` — stack-agnostic release with built-in version calculator — closes #6
+
 ### v1.0.2
 - feat: post-deploy health check in python, nodejs, docker-only templates — closes #3
   (polls `/health` every 5s for up to 60s; fails pipeline on timeout)

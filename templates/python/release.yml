@@ -1,0 +1,83 @@
+##########################################################################
+# Semantic Release — Python
+# Triggers automatically after CI passes on main.
+# Bumps version based on conventional commits:
+#   feat:     → minor bump  (1.0.0 → 1.1.0)
+#   fix:      → patch bump  (1.0.0 → 1.0.1)
+#   feat!: or BREAKING CHANGE: → major bump (1.0.0 → 2.0.0)
+#
+# Requirements:
+#   pip install python-semantic-release
+#   pyproject.toml or setup.cfg with [tool.semantic_release] config
+#   GH_TOKEN secret with repo write access
+##########################################################################
+
+name: Release (Python)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0   # full history needed for version calculation
+          token: ${{ secrets.GH_TOKEN }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install semantic release
+        run: pip install python-semantic-release
+
+      - name: Configure git
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Run semantic release
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: semantic-release version --push
+
+      - name: Publish to PyPI (optional)
+        if: ${{ vars.PUBLISH_TO_PYPI == 'true' }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          pip install build twine
+          python -m build
+          twine upload dist/*
+
+# ── pyproject.toml configuration ────────────────────────────────────────────
+# Add this section to your pyproject.toml:
+#
+# [tool.semantic_release]
+# version_toml = ["pyproject.toml:project.version"]
+# branch = "main"
+# changelog_file = "CHANGELOG.md"
+# build_command = "pip install build && python -m build"
+# commit_parser = "conventional_commits"
+#
+# [tool.semantic_release.commit_parser_options]
+# allowed_tags = ["feat", "fix", "perf", "refactor", "chore", "docs"]
+# minor_tags   = ["feat"]
+# patch_tags   = ["fix", "perf"]
