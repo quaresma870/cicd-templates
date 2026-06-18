@@ -98,6 +98,16 @@ cicd-templates/
 
 ---
 
+## Changelog
+
+### v1.0.1
+- feat: `timeout-minutes` added to every job in all 7 templates — closes #1
+  (lint: 10min, test: 20min, security: 15min, build: 30min, deploy: 15min)
+- feat: `concurrency` group added to all templates — cancels in-progress runs on same branch — closes #4
+- chore: Dependabot enabled for GitHub Actions (weekly)
+
+---
+
 ## License
 
 MIT
