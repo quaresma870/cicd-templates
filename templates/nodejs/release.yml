@@ -1,0 +1,73 @@
+##########################################################################
+# Semantic Release — Node.js
+# Triggers automatically after CI passes on main.
+# Bumps version, generates CHANGELOG.md and creates a GitHub Release.
+#
+# Requirements:
+#   npm install --save-dev semantic-release @semantic-release/git
+#                          @semantic-release/changelog @semantic-release/github
+#   .releaserc.json in repo root (example at end of file)
+#   GH_TOKEN secret with repo write access
+##########################################################################
+
+name: Release (Node.js)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run semantic release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          NPM_TOKEN:    ${{ secrets.NPM_TOKEN }}   # optional — only if publishing to npm
+        run: npx semantic-release
+
+# ── .releaserc.json example ─────────────────────────────────────────────────
+# {
+#   "branches": ["main"],
+#   "plugins": [
+#     "@semantic-release/commit-analyzer",
+#     "@semantic-release/release-notes-generator",
+#     ["@semantic-release/changelog", {
+#       "changelogFile": "CHANGELOG.md"
+#     }],
+#     "@semantic-release/npm",
+#     ["@semantic-release/git", {
+#       "assets": ["CHANGELOG.md", "package.json"],
+#       "message": "chore(release): ${nextRelease.version} [skip ci]"
+#     }],
+#     "@semantic-release/github"
+#   ]
+# }

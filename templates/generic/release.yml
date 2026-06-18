@@ -1,0 +1,96 @@
+##########################################################################
+# Semantic Release — Generic
+# Adapt to your stack by uncommenting the relevant step.
+# Triggers after CI passes on main.
+#
+# Conventional commit format:
+#   feat: new feature         → minor version bump
+#   fix: bug fix              → patch version bump
+#   feat!: breaking change    → major version bump
+#   docs: documentation only  → no release
+#   chore: maintenance        → no release
+##########################################################################
+
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Configure git bot
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # ── Option A: Python (python-semantic-release) ───────────────────────
+      # - uses: actions/setup-python@v6
+      #   with:
+      #     python-version: "3.11"
+      # - run: pip install python-semantic-release
+      # - run: semantic-release version --push
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      # ── Option B: Node.js (semantic-release) ─────────────────────────────
+      # - uses: actions/setup-node@v4
+      #   with:
+      #     node-version: "20"
+      # - run: npx semantic-release
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      # ── Option C: Any stack — tag-based release via GitHub CLI ───────────
+      - name: Determine next version from commits
+        id: next_version
+        run: |
+          # Read commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+          COMMITS=$(git log "${LAST_TAG}..HEAD" --format="%s" 2>/dev/null || git log --format="%s")
+          MAJOR=0; MINOR=0; PATCH=0
+          IFS='.' read -r V_MAJOR V_MINOR V_PATCH <<< "${LAST_TAG#v}"
+          while IFS= read -r msg; do
+            if echo "$msg" | grep -qE "^feat!:|BREAKING CHANGE:"; then MAJOR=1
+            elif echo "$msg" | grep -qE "^feat:"; then [ $MAJOR -eq 0 ] && MINOR=1
+            elif echo "$msg" | grep -qE "^fix:|^perf:"; then [ $MAJOR -eq 0 ] && [ $MINOR -eq 0 ] && PATCH=1
+            fi
+          done <<< "$COMMITS"
+          if   [ $MAJOR -eq 1 ]; then NEXT="v$((V_MAJOR+1)).0.0"
+          elif [ $MINOR -eq 1 ]; then NEXT="v${V_MAJOR}.$((V_MINOR+1)).0"
+          elif [ $PATCH -eq 1 ]; then NEXT="v${V_MAJOR}.${V_MINOR}.$((V_PATCH+1))"
+          else echo "No releasable commits found."; exit 0; fi
+          echo "next_tag=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Next version: $NEXT"
+
+      - name: Create GitHub Release
+        if: steps.next_version.outputs.next_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          TAG=${{ steps.next_version.outputs.next_tag }}
+          git tag "$TAG"
+          git push origin "$TAG"
+          NOTES=$(git log "$(git describe --tags --abbrev=0 HEAD^)..HEAD" --format="- %s" 2>/dev/null || echo "Initial release")
+          gh release create "$TAG" --title "Release $TAG" --notes "$NOTES"
