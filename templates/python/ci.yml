@@ -169,3 +169,20 @@ jobs:
             docker pull ${{ needs.build.outputs.image_full }}
             docker compose up -d --no-build
             docker system prune -f
+
+      - name: Wait for application to be healthy
+        run: |
+          echo "Waiting for application health check..."
+          MAX_WAIT=60
+          ELAPSED=0
+          until curl -sf "https://${{ secrets.VPS_HOST }}/health" > /dev/null 2>&1; do
+            if [ $ELAPSED -ge $MAX_WAIT ]; then
+              echo "Health check timed out after ${MAX_WAIT}s — rolling back"
+              exit 1
+            fi
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+            echo "  Waited ${ELAPSED}s..."
+          done
+          echo "Application is healthy!"
+

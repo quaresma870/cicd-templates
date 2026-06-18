@@ -100,6 +100,12 @@ cicd-templates/
 
 ## Changelog
 
+### v1.0.2
+- feat: post-deploy health check in python, nodejs, docker-only templates — closes #3
+  (waits up to 60s for `/health` to respond; fails pipeline if timeout)
+- docs: OIDC authentication documented in python, nodejs, docker-only — closes #2
+  (`packages: write` + `GITHUB_TOKEN` — no long-lived secrets needed)
+
 ### v1.0.1
 - feat: `timeout-minutes` added to every job in all 7 templates — closes #1
   (lint: 10min, test: 20min, security: 15min, build: 30min, deploy: 15min)
