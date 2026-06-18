@@ -1,0 +1,170 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Ansible CI/CD Template
+# Stages: Lint → Syntax Check → Security Scan → Dry Run → Deploy
+#
+# Required secrets:
+#   ANSIBLE_VAULT_PASSWORD   — Vault password for encrypted vars
+#   INVENTORY_HOST           — Target host IP/domain
+#   INVENTORY_USER           — SSH user for Ansible
+#   INVENTORY_SSH_KEY        — Private SSH key
+#
+# Required variables:
+#   PLAYBOOK                 — Main playbook file (e.g. site.yml)
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Ansible CI/CD
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run in check mode (dry run)"
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      tags:
+        description: "Ansible tags to run (comma-separated, empty = all)"
+        required: false
+        default: ""
+
+env:
+  ANSIBLE_FORCE_COLOR: "1"
+  ANSIBLE_HOST_KEY_CHECKING: "false"
+  PLAYBOOK: ${{ vars.PLAYBOOK || 'site.yml' }}
+
+jobs:
+  # ── Lint ─────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install Ansible + lint tools
+        run: pip install ansible ansible-lint yamllint
+      - name: Lint playbooks with ansible-lint
+        run: ansible-lint --profile=production || ansible-lint
+      - name: Lint YAML files
+        run: yamllint .
+
+  # ── Syntax Check ─────────────────────────────────────────────────────────────
+  syntax:
+    name: Syntax Check
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install ansible
+      - name: Check playbook syntax
+        run: ansible-playbook ${{ env.PLAYBOOK }} --syntax-check -i localhost,
+
+  # ── Security Scan ─────────────────────────────────────────────────────────────
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install tools
+        run: pip install ansible checkov
+      - name: Scan with Checkov
+        run: |
+          checkov -d . --framework ansible --output cli --soft-fail || true
+      - name: Check for vault-encrypted secrets
+        run: |
+          # Warn if plaintext passwords found outside vault files
+          if grep -rE "^(ansible_password|ansible_become_pass|vault_).*:\s+['\"]?[^!]" \
+            --include="*.yml" --include="*.yaml" \
+            --exclude="*vault*" --exclude-dir=".git" .; then
+            echo "WARNING: Possible unencrypted secrets found. Use ansible-vault."
+            exit 1
+          fi
+          echo "Secrets check passed."
+
+  # ── Dry Run ───────────────────────────────────────────────────────────────────
+  dry-run:
+    name: Dry Run (check mode)
+    runs-on: ubuntu-latest
+    needs: [syntax, security]
+    if: github.event_name == 'pull_request' || github.event.inputs.dry_run == 'true'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install ansible
+      - name: Write vault password
+        run: echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > .vault_pass
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INVENTORY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+      - name: Run playbook in check mode
+        run: |
+          ansible-playbook ${{ env.PLAYBOOK }} \
+            --check \
+            --diff \
+            --vault-password-file=.vault_pass \
+            --private-key=~/.ssh/deploy_key \
+            --user=${{ secrets.INVENTORY_USER }} \
+            -i "${{ secrets.INVENTORY_HOST }}," \
+            ${{ github.event.inputs.tags && format('--tags {0}', github.event.inputs.tags) || '' }}
+      - name: Cleanup sensitive files
+        if: always()
+        run: rm -f .vault_pass ~/.ssh/deploy_key
+
+  # ── Deploy ───────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: [syntax, security]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      github.event.inputs.dry_run != 'true'
+    environment:
+      name: production
+      url: https://${{ secrets.INVENTORY_HOST }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install ansible
+      - name: Write vault password
+        run: echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > .vault_pass
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.INVENTORY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+      - name: Run playbook
+        run: |
+          ansible-playbook ${{ env.PLAYBOOK }} \
+            --vault-password-file=.vault_pass \
+            --private-key=~/.ssh/deploy_key \
+            --user=${{ secrets.INVENTORY_USER }} \
+            -i "${{ secrets.INVENTORY_HOST }}," \
+            ${{ github.event.inputs.tags && format('--tags {0}', github.event.inputs.tags) || '' }}
+      - name: Cleanup sensitive files
+        if: always()
+        run: rm -f .vault_pass ~/.ssh/deploy_key

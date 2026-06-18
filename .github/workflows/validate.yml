@@ -1,0 +1,28 @@
+name: Validate Templates
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate all template YAML files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install yamllint
+        run: pip install yamllint
+      - name: Validate all template YAML files
+        run: |
+          echo "Validating template YAML files..."
+          find templates/ -name "*.yml" | while read f; do
+            echo -n "  Checking $f ... "
+            yamllint -d '{extends: relaxed, rules: {line-length: {max: 150}}}' "$f" \
+              && echo "OK" || { echo "FAILED"; exit 1; }
+          done
+          echo "All templates valid."
