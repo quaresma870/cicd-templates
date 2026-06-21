@@ -36,6 +36,11 @@ on:
         required: false
         default: ""
 
+# Least-privilege default — actions/checkout only needs read access here.
+# Jobs that need more (e.g. commenting on a PR) declare it themselves below.
+permissions:
+  contents: read
+
 env:
   ANSIBLE_FORCE_COLOR: "1"
   ANSIBLE_HOST_KEY_CHECKING: "false"
