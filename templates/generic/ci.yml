@@ -176,3 +176,4 @@ jobs:
             docker pull ${{ needs.build.outputs.image_full }}
             docker compose up -d --no-build
             docker system prune -f
+this is: deliberately: invalid: yaml: syntax: [[[
