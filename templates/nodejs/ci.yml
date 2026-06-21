@@ -35,6 +35,11 @@ on:
         type: choice
         options: [ghcr, vps, both, none]
 
+# Least-privilege default — actions/checkout only needs read access here.
+# Jobs that need more (e.g. commenting on a PR) declare it themselves below.
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: "22"
   IMAGE_NAME: ${{ vars.APP_NAME || 'app' }}

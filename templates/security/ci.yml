@@ -29,6 +29,11 @@ on:
         type: choice
         options: [LOW, MEDIUM, HIGH, CRITICAL]
 
+# Least-privilege default — actions/checkout only needs read access here.
+# Jobs that need more (e.g. commenting on a PR) declare it themselves below.
+permissions:
+  contents: read
+
 env:
   SEVERITY: ${{ github.event.inputs.severity || 'HIGH' }}
 
