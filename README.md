@@ -54,6 +54,22 @@ cp templates/python/ci.yml /your-repo/.github/workflows/ci.yml
 - **Security scans** — Trivy, pip-audit/npm-audit, Gitleaks, Semgrep, Checkov
 - **Artifacts** — reports uploaded and retained for 7–30 days
 
+`python/`, `nodejs/`, `generic/`, and `docker-only/` additionally generate a
+software bill of materials and sign the built image on every push to `main`
+(skipped on PR builds, which don't push an image):
+
+- **SBOM** — [Syft](https://github.com/anchore/syft) via `anchore/sbom-action`, SPDX format, uploaded as a workflow artifact
+- **Image signing** — [Cosign](https://github.com/sigstore/cosign) keyless signing via GitHub's OIDC token (no signing key to manage or rotate)
+
+Verify a signed image before pulling it in production:
+
+```bash
+cosign verify \
+  --certificate-identity-regexp "https://github.com/YOUR_ORG/YOUR_REPO/.github/workflows/.*@refs/heads/main" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  ghcr.io/YOUR_ORG/YOUR_IMAGE:latest
+```
+
 ---
 
 ## Deploy targets

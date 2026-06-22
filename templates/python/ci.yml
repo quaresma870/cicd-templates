@@ -114,6 +114,9 @@ jobs:
     name: Build Docker image
     runs-on: ubuntu-latest
     needs: [test, security]
+    permissions:
+      contents: read
+      id-token: write   # needed for cosign's keyless OIDC signing below
     outputs:
       image_tag: ${{ steps.meta.outputs.version }}
       image_full: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
@@ -138,6 +141,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN }}
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -146,6 +150,30 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # ── SBOM + signing — skipped on PR builds, which don't push an image ──────
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+      - name: Upload SBOM artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+          retention-days: 90
+      - name: Install Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+      - name: Sign the image (keyless, via GitHub OIDC)
+        if: github.event_name != 'pull_request'
+        run: |
+          cosign sign --yes \
+            "${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
 
   # ── Deploy → VPS ────────────────────────────────────────────────────────────
   deploy-vps:
