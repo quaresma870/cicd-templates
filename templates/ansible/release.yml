@@ -1,0 +1,98 @@
+##########################################################################
+# Release — Ansible
+# Triggers after CI passes on main. Tag-based — Ansible roles/playbooks
+# aren't versioned via a package.json/pyproject.toml; they're typically
+# pinned by git tag when referenced from a requirements.yml
+# (`src: https://github.com/you/role, version: v1.2.3`), so a clean git
+# tag + GitHub Release is the release artifact that actually matters here.
+#
+# If this repo is structured as an Ansible Collection (has a galaxy.yml),
+# uncomment the "Bump galaxy.yml + publish" step below instead of/as well
+# as the plain git tag.
+#
+# Conventional commit format:
+#   feat: new feature         → minor version bump
+#   fix: bug fix              → patch version bump
+#   feat!: breaking change    → major version bump
+#   docs:/chore: etc.         → no release
+##########################################################################
+
+name: Release (Ansible)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Tag release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Configure git bot
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine next version from commits
+        id: next_version
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+          COMMITS=$(git log "${LAST_TAG}..HEAD" --format="%s" 2>/dev/null || git log --format="%s")
+          MAJOR=0; MINOR=0; PATCH=0
+          IFS='.' read -r V_MAJOR V_MINOR V_PATCH <<< "${LAST_TAG#v}"
+          while IFS= read -r msg; do
+            if echo "$msg" | grep -qE "^feat!:|BREAKING CHANGE:"; then MAJOR=1
+            elif echo "$msg" | grep -qE "^feat:"; then [ $MAJOR -eq 0 ] && MINOR=1
+            elif echo "$msg" | grep -qE "^fix:|^perf:"; then [ $MAJOR -eq 0 ] && [ $MINOR -eq 0 ] && PATCH=1
+            fi
+          done <<< "$COMMITS"
+          if   [ $MAJOR -eq 1 ]; then NEXT="v$((V_MAJOR+1)).0.0"
+          elif [ $MINOR -eq 1 ]; then NEXT="v${V_MAJOR}.$((V_MINOR+1)).0"
+          elif [ $PATCH -eq 1 ]; then NEXT="v${V_MAJOR}.${V_MINOR}.$((V_PATCH+1))"
+          else echo "No releasable commits found."; exit 0; fi
+          echo "next_tag=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Next version: $NEXT"
+
+      - name: Create GitHub Release
+        if: steps.next_version.outputs.next_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          TAG=${{ steps.next_version.outputs.next_tag }}
+          git tag "$TAG"
+          git push origin "$TAG"
+          NOTES=$(git log "$(git describe --tags --abbrev=0 HEAD^)..HEAD" --format="- %s" 2>/dev/null || echo "Initial release")
+          gh release create "$TAG" --title "Release $TAG" --notes "$NOTES"
+
+      # ── If published as an Ansible Collection (has a galaxy.yml) ─────────
+      # - name: Bump galaxy.yml version
+      #   if: steps.next_version.outputs.next_tag != ''
+      #   run: |
+      #     VERSION_NO_V="${{ steps.next_version.outputs.next_tag }}"
+      #     sed -i "s/^version:.*/version: ${VERSION_NO_V#v}/" galaxy.yml
+      #     git add galaxy.yml && git commit -m "chore: bump galaxy.yml to ${VERSION_NO_V#v}" && git push
+      # - name: Publish to Ansible Galaxy
+      #   if: steps.next_version.outputs.next_tag != ''
+      #   env:
+      #     ANSIBLE_GALAXY_TOKEN: ${{ secrets.ANSIBLE_GALAXY_TOKEN }}
+      #   run: |
+      #     pip install ansible-core
+      #     ansible-galaxy collection build
+      #     ansible-galaxy collection publish *.tar.gz --token "$ANSIBLE_GALAXY_TOKEN"

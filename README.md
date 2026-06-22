@@ -20,6 +20,15 @@ A collection of production-ready GitHub Actions CI/CD pipeline templates coverin
 | [`terraform/`](templates/terraform/) | Terraform IaC | Format → Validate → Security → Plan → Apply |
 | [`security/`](templates/security/) | Any repo | Secrets → Deps → SAST → Container → SBOM |
 
+`python/`, `nodejs/`, `generic/`, `docker-only/`, `ansible/`, and `terraform/`
+each include a `release.yml` for automated semantic-version tagging from
+conventional commits. **`security/` deliberately doesn't** — it's a scanning
+pipeline you bolt onto an existing repo, not a deployable artifact with its
+own version number; there's nothing meaningful for a release workflow to tag
+or publish. If you do want to track when the scanning configuration itself
+changed, a plain git tag on this repo (not the one you're scanning) is enough
+— no dedicated workflow needed for that.
+
 ---
 
 ## How to use
@@ -81,13 +90,13 @@ Quick reference — secrets common to all deploy templates:
 ```
 cicd-templates/
 ├── templates/
-│   ├── python/ci.yml
-│   ├── nodejs/ci.yml
-│   ├── generic/ci.yml
-│   ├── docker-only/ci.yml
-│   ├── ansible/ci.yml
-│   ├── terraform/ci.yml
-│   └── security/ci.yml
+│   ├── python/{ci,release}.yml
+│   ├── nodejs/{ci,release}.yml
+│   ├── generic/{ci,release}.yml
+│   ├── docker-only/{ci,release}.yml
+│   ├── ansible/{ci,release}.yml
+│   ├── terraform/{ci,release}.yml
+│   └── security/ci.yml          # no release.yml — see "Templates" above for why
 ├── docs/
 │   ├── how-to-use.md
 │   ├── secrets-setup.md
