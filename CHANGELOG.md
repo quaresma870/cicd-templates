@@ -3,6 +3,38 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.1.0
+- feat: **`release.yml` added to `docker-only`, `ansible`, and `terraform`** — same tag-based,
+  conventional-commit-driven version calculation as `generic/release.yml`'s pattern (no
+  `package.json`/`pyproject.toml` to bump for these stacks). `docker-only` additionally re-tags the
+  already-built `:latest` image with the computed semantic version. `terraform` re-runs
+  `terraform validate` against the exact tagged commit before tagging — belt-and-suspenders given
+  how directly other infrastructure may pin to that tag via a git-ref module source.
+  `templates/security/` deliberately does **not** get one — documented explicitly why (it's a
+  scanning pipeline bolted onto an existing repo, not a deployable artifact with its own version).
+- feat: **SBOM generation + keyless container image signing** — `python`, `nodejs`, `generic`, and
+  `docker-only`'s build jobs now generate a software bill of materials
+  ([Syft](https://github.com/anchore/syft) via `anchore/sbom-action`, SPDX format, uploaded as a
+  90-day artifact) and sign the pushed image with [Cosign](https://github.com/sigstore/cosign) via
+  keyless OIDC signing — no signing key to manage, rotate, or leak. README includes a
+  `cosign verify` example for checking a signed image before pulling it in production.
+- feat: **reusable workflow_call version of the Python template** — `.github/workflows/python-ci-reusable.yml`,
+  an alternative to copying `templates/python/ci.yml` (not a replacement): call it from your own
+  repo instead, and a fix landing here reaches you automatically. Must live directly in
+  `.github/workflows/` rather than under `templates/` — a GitHub Actions platform requirement,
+  confirmed against official docs rather than assumed. Found and fixed two genuinely non-obvious
+  bugs by actually reproducing them on a throwaway test branch, not just by reading the YAML: (1)
+  a calling workflow's `permissions:` are a hard ceiling on what the called workflow's jobs can be
+  granted — omitting `id-token: write` on the *caller* breaks cosign signing with an opaque,
+  job-less "workflow file issue" at dispatch time; (2) `environment.url` cannot reference the
+  `secrets` context at all, which fails an entire run the same opaque way. Both are now documented
+  prominently in the file itself, not just fixed silently. Verified end-to-end against a minimal
+  real Python fixture: lint/test/security all passed for real, build correctly reached the actual
+  `docker buildx build --push` step.
+- chore: `validate.yml` extended to also yamllint any `*-reusable.yml` file under
+  `.github/workflows/`, so the new file doesn't silently bypass the check that covers every other
+  workflow file in this repo.
+
 ### v1.0.4
 - fix: **explicit least-privilege `permissions:` added to all 7 `ci.yml` templates** —
   none of them declared a `permissions:` block, meaning every job ran with whatever the

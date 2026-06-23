@@ -1,48 +1,90 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Node.js CI/CD Template
-# Stages: Lint → Test → Security Scan → Build → Deploy (GHCR + VPS SSH)
+# Python CI/CD Template — REUSABLE (workflow_call) version
 #
-# Required secrets:
-#   GHCR_TOKEN       — GitHub token with packages:write scope
-#   VPS_HOST         — SSH host
-#   VPS_USER         — SSH user
-#   VPS_SSH_KEY      — Private SSH key
-#   VPS_PORT         — SSH port (default 22)
+# This is an ALTERNATIVE to templates/python/ci.yml, not a replacement.
+# Copying ci.yml gives you a workflow that's fully yours to edit; calling
+# this one means a fix or new best practice landing here reaches every
+# caller automatically, at the cost of being less visible/editable from
+# the consuming repo. See the README's "How to use" section for the
+# tradeoffs and pick whichever fits.
 #
-# Required variables:
-#   APP_NAME         — Docker image name and systemd service
-#   DEPLOY_PATH      — Path on VPS
+# NOTE on file location: GitHub Actions requires reusable workflows to live
+# directly in .github/workflows/ — subdirectories aren't supported, so this
+# can't live alongside the copy-paste template at templates/python/ci.yml
+# the way you might expect. This is the one exception to that convention.
+#
+# Usage from a consuming repo's own workflow:
+#
+#   permissions:
+#     contents: read
+#     id-token: write    # REQUIRED — see note below
+#     packages: write    # only if deploy_target includes 'ghcr'
+#
+#   jobs:
+#     ci:
+#       uses: quaresma870/cicd-templates/.github/workflows/python-ci-reusable.yml@main
+#       with:
+#         python_version: "3.12"
+#         image_name: my-app
+#         deploy_target: vps
+#         deploy_path: /opt/my-app
+#       secrets: inherit   # or pass each secret explicitly, see below
+#
+# ⚠️ The permissions: block above is NOT optional decoration — a calling
+# workflow's permissions are a CEILING on what the called workflow's jobs
+# can be granted. Omitting id-token: write on the CALLER causes the build
+# job's cosign signing step to fail with an opaque "workflow file issue"
+# at dispatch time, before any job even starts — confirmed by deliberately
+# reproducing this exact failure while building this file, not assumed.
+#
+# Stages: Lint → Test → Security Scan → Build (+ SBOM + cosign sign) → Deploy
 # ──────────────────────────────────────────────────────────────────────────────
 
-name: Node.js CI/CD
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+name: Python CI/CD (reusable)
 
 on:
-  push:
-    branches: [main, dev]
-    tags: ["v*.*.*"]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
+  workflow_call:
     inputs:
+      python_version:
+        description: "Python version to use"
+        type: string
+        default: "3.11"
+      image_name:
+        description: "Docker image name (without registry/owner prefix)"
+        type: string
+        default: "app"
       deploy_target:
-        description: "Deploy target"
+        description: "Where to deploy after a successful build on main"
+        type: string
+        default: "ghcr"   # ghcr | vps | both | none
+      deploy_path:
+        description: "Path on the VPS where docker-compose.yml lives (required if deploy_target includes vps)"
+        type: string
+        default: ""
+      coverage_threshold:
+        description: "Minimum test coverage percentage required to pass"
+        type: number
+        default: 70
+    secrets:
+      GHCR_TOKEN:
+        description: "GitHub token with packages:write scope — required"
+        required: true
+      VPS_HOST:
+        description: "SSH host — required only if deploy_target includes vps"
         required: false
-        default: "ghcr"
-        type: choice
-        options: [ghcr, vps, both, none]
+      VPS_USER:
+        required: false
+      VPS_SSH_KEY:
+        required: false
+      VPS_PORT:
+        required: false
 
-# Least-privilege default — actions/checkout only needs read access here.
-# Jobs that need more (e.g. commenting on a PR) declare it themselves below.
 permissions:
   contents: read
 
 env:
-  NODE_VERSION: "22"
-  IMAGE_NAME: ${{ vars.APP_NAME || 'app' }}
+  PYTHON_VERSION: ${{ inputs.python_version }}
+  IMAGE_NAME: ${{ inputs.image_name }}
   REGISTRY: ghcr.io
 
 jobs:
@@ -53,12 +95,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install ruff
+      - run: ruff check .
 
   # ── Test ────────────────────────────────────────────────────────────────────
   test:
@@ -68,18 +110,20 @@ jobs:
     needs: lint
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements.txt
       - name: Run tests with coverage
-        run: npm run test -- --coverage --coverageThreshold='{"global":{"lines":70}}'
+        run: pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-fail-under=${{ inputs.coverage_threshold }}
+        env:
+          ENVIRONMENT: test
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coverage/
+          path: coverage.xml
           retention-days: 7
 
   # ── Security Scan ───────────────────────────────────────────────────────────
@@ -90,25 +134,20 @@ jobs:
     needs: lint
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
-      - name: Run OSSF Scorecard
-        uses: ossf/scorecard-action@v2.4.0
-        with:
-          results_file: scorecard-results.sarif
-          results_format: sarif
-          publish_results: false
-        continue-on-error: true
-      - name: Upload OSSF results
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Audit dependencies (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --format=json -o pip-audit-report.json || true
+          pip-audit -r requirements.txt
+      - name: Upload audit report
         uses: actions/upload-artifact@v4
         with:
-          name: scorecard-results
-          path: scorecard-results.sarif
+          name: pip-audit-report
+          path: pip-audit-report.json
           retention-days: 7
 
   # ── Build ───────────────────────────────────────────────────────────────────
@@ -187,10 +226,14 @@ jobs:
     if: |
       github.ref == 'refs/heads/main' &&
       github.event_name != 'pull_request' &&
-      (github.event.inputs.deploy_target == 'vps' || github.event.inputs.deploy_target == 'both' || github.event.inputs.deploy_target == '')
+      (inputs.deploy_target == 'vps' || inputs.deploy_target == 'both')
+    # NOTE: environment.url deliberately does NOT reference secrets.VPS_HOST —
+    # the environment block's fields don't support the secrets context, and
+    # doing so fails the entire workflow at dispatch time, before any job
+    # runs, with an opaque "workflow file issue" — confirmed by deliberately
+    # reproducing this exact failure while building this file, not assumed.
     environment:
       name: production
-      url: https://${{ secrets.VPS_HOST }}
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -200,7 +243,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
           script: |
-            cd ${{ vars.DEPLOY_PATH }}
+            cd ${{ inputs.deploy_path }}
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker pull ${{ needs.build.outputs.image_full }}
             docker compose up -d --no-build
@@ -221,4 +264,3 @@ jobs:
             echo "  Waited ${ELAPSED}s..."
           done
           echo "Application is healthy!"
-

@@ -26,3 +26,13 @@ jobs:
               && echo "OK" || { echo "FAILED"; exit 1; }
           done
           echo "All templates valid."
+      - name: Validate reusable workflow files
+        run: |
+          echo "Validating reusable workflow files..."
+          for f in .github/workflows/*-reusable.yml; do
+            [ -f "$f" ] || continue
+            echo -n "  Checking $f ... "
+            yamllint -d '{extends: relaxed, rules: {line-length: {max: 150}}}' "$f" \
+              && echo "OK" || { echo "FAILED"; exit 1; }
+          done
+          echo "All reusable workflows valid."
