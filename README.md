@@ -33,6 +33,10 @@ changed, a plain git tag on this repo (not the one you're scanning) is enough
 
 ## How to use
 
+Two ways to use these templates — pick whichever fits:
+
+### Option A — Copy (full control)
+
 1. Copy the relevant `ci.yml` to your repo's `.github/workflows/` directory
 2. Configure the required secrets and variables (see each template's README or [docs/secrets-setup.md](docs/secrets-setup.md))
 3. Push — the pipeline runs automatically
@@ -41,6 +45,45 @@ changed, a plain git tag on this repo (not the one you're scanning) is enough
 # Example: add the Python template to your repo
 cp templates/python/ci.yml /your-repo/.github/workflows/ci.yml
 ```
+
+The workflow is now entirely yours — edit it freely. A fix or improvement
+landing in this repo later **will not** reach you automatically; you'd need
+to re-copy and re-diff by hand.
+
+### Option B — Call (stays in sync, less editable)
+
+Available for `python` so far ([`.github/workflows/python-ci-reusable.yml`](.github/workflows/python-ci-reusable.yml)
+— GitHub requires reusable workflows to live directly in `.github/workflows/`,
+not under `templates/`, so this is the one exception to this repo's usual layout).
+
+```yaml
+# .github/workflows/ci.yml in YOUR repo
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+  id-token: write    # required — see the comment at the top of python-ci-reusable.yml for why
+  packages: write     # only if deploy_target includes 'ghcr'
+
+jobs:
+  ci:
+    uses: quaresma870/cicd-templates/.github/workflows/python-ci-reusable.yml@main
+    with:
+      python_version: "3.12"
+      image_name: my-app
+      deploy_target: ghcr     # ghcr | vps | both | none
+    secrets:
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+      # VPS_HOST / VPS_USER / VPS_SSH_KEY / VPS_PORT — only if deploy_target includes vps
+```
+
+A fix or new best practice landing in `python-ci-reusable.yml` reaches every
+caller automatically next run — at the cost of not being able to tweak a
+single step without forking this repo. Pick **Option A** if you want full
+ownership of the workflow file; pick **Option B** if you'd rather not
+maintain your own copy and are fine with this repo's defaults.
 
 ---
 
@@ -118,7 +161,8 @@ cicd-templates/
 │   ├── secrets-setup.md
 │   └── deploy-targets.md
 └── .github/workflows/
-    └── validate.yml       # Validates all template YAMLs on every push
+    ├── validate.yml                # Validates all template YAMLs on every push
+    └── python-ci-reusable.yml      # Callable alternative to templates/python/ci.yml — see "How to use"
 ```
 
 ---
