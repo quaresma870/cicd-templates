@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.2.0
+- fix: **6 real bugs — secrets referenced where the context isn't available** — 5 templates
+  (python, docker-only, generic, nodejs, ansible) referenced `${{ secrets.VPS_HOST }}` (or
+  `INVENTORY_HOST`) directly inside `jobs.<job_id>.environment.url`, and `security/ci.yml`
+  referenced `secrets.SLACK_WEBHOOK` directly inside a `steps.if` condition — both genuinely
+  disallowed per GitHub's own Contexts reference. Confirmed against the current, official
+  documentation before fixing (not a stale-linter false positive), and fixed using GitHub's own
+  documented patterns (a step output for the environment URL case; the same `env:` indirection
+  workaround already used in the sibling infra-as-code repo for the `if:` case).
+- feat: **new `actionlint` semantic-check step in `validate.yml`** — `yamllint` alone only checks
+  YAML *syntax*, with no concept of what a valid *workflow* actually looks like, which is exactly
+  the class of gap that let the 6 bugs above ship undetected. Verified to catch a real regression
+  by deliberately reintroducing one of the bugs and confirming a precise, actionable annotation.
+- fix: 2 additional real (if minor) shellcheck findings — `read` without `-r` and the
+  `A && B || C` anti-pattern — surfaced by actionlint's own shellcheck integration once it was
+  wired up, in `validate.yml`'s own scripts and one template.
+
 ### v1.1.0
 - feat: **`release.yml` added to `docker-only`, `ansible`, and `terraform`** — same tag-based,
   conventional-commit-driven version calculation as `generic/release.yml`'s pattern (no
