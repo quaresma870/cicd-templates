@@ -225,7 +225,13 @@ jobs:
     if: always() && github.event_name == 'schedule'
     steps:
       - name: Notify Slack on failure
-        if: contains(needs.*.result, 'failure') && secrets.SLACK_WEBHOOK != ''
+        # secrets context isn't supported directly in if: conditions at
+        # all ("Secrets can't be directly referenced in if: conditionals",
+        # per GitHub's own docs) -- confirmed by actionlint flagging this
+        # exact line, and matching the identical anti-pattern already
+        # found and fixed in the sibling infra-as-code repo. env: CAN
+        # reference secrets.*, and if: can then check env.* instead.
+        if: contains(needs.*.result, 'failure') && env.SLACK_WEBHOOK != ''
         uses: slackapi/slack-github-action@v2.0.0
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK }}
@@ -243,4 +249,5 @@ jobs:
               }]
             }
         env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

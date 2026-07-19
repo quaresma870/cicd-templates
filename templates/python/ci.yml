@@ -187,8 +187,20 @@ jobs:
       (github.event.inputs.deploy_target == 'vps' || github.event.inputs.deploy_target == 'both' || github.event.inputs.deploy_target == '')
     environment:
       name: production
-      url: https://${{ secrets.VPS_HOST }}
+      # jobs.<job_id>.environment.url does NOT have the secrets context
+      # available (confirmed against GitHub's own Contexts reference —
+      # https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#context-availability
+      # — env, vars, steps, and needs ARE listed there, secrets is not),
+      # so this can't reference ${{ secrets.VPS_HOST }} directly.
+      # steps IS allowed here, so a step's own output (computed in a
+      # context where secrets IS available, like steps.run/steps.env)
+      # is the correct, documented way to set a dynamic environment URL.
+      url: https://${{ steps.env_url.outputs.host }}
     steps:
+      - name: Compute environment URL
+        id: env_url
+        run: echo "host=${{ secrets.VPS_HOST }}" >> "$GITHUB_OUTPUT"
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -218,4 +230,3 @@ jobs:
             echo "  Waited ${ELAPSED}s..."
           done
           echo "Application is healthy!"
-
