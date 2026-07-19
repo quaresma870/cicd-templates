@@ -20,10 +20,14 @@ jobs:
       - name: Validate all template YAML files
         run: |
           echo "Validating template YAML files..."
-          find templates/ -name "*.yml" | while read f; do
+          find templates/ -name "*.yml" | while read -r f; do
             echo -n "  Checking $f ... "
-            yamllint -d '{extends: relaxed, rules: {line-length: {max: 150}}}' "$f" \
-              && echo "OK" || { echo "FAILED"; exit 1; }
+            if yamllint -d '{extends: relaxed, rules: {line-length: {max: 150}}}' "$f"; then
+              echo "OK"
+            else
+              echo "FAILED"
+              exit 1
+            fi
           done
           echo "All templates valid."
       - name: Validate reusable workflow files
@@ -32,7 +36,50 @@ jobs:
           for f in .github/workflows/*-reusable.yml; do
             [ -f "$f" ] || continue
             echo -n "  Checking $f ... "
-            yamllint -d '{extends: relaxed, rules: {line-length: {max: 150}}}' "$f" \
-              && echo "OK" || { echo "FAILED"; exit 1; }
+            if yamllint -d '{extends: relaxed, rules: {line-length: {max: 150}}}' "$f"; then
+              echo "OK"
+            else
+              echo "FAILED"
+              exit 1
+            fi
           done
           echo "All reusable workflows valid."
+
+      - name: actionlint — semantic check (context availability, expression validity)
+        # yamllint (above) only checks YAML *syntax* -- it has no idea what a
+        # valid GitHub Actions workflow actually looks like semantically, so
+        # it happily passes files that are syntactically fine YAML but
+        # produce a broken *workflow* once actually used. This is exactly
+        # the class of gap that let 6 real bugs ship undetected across these
+        # templates: 5 templates referenced ${{ secrets.VPS_HOST }} (or
+        # INVENTORY_HOST) directly inside jobs.<job_id>.environment.url,
+        # and one referenced secrets.SLACK_WEBHOOK directly inside a
+        # steps.if condition -- both genuinely disallowed per GitHub's own
+        # Contexts reference (confirmed against the current, official
+        # table before concluding these were real bugs, not a stale
+        # linter-schema false positive).
+        #
+        # Uses `docker run` directly rather than a `uses: docker://...`
+        # action step -- confirmed on real CI that the latter's `args:`
+        # field does NOT get shell glob expansion (a docker:// action's
+        # args are passed as literal, space-separated tokens straight to
+        # the container's entrypoint, not through a shell), so
+        # `templates/*/ci.yml` never matched any real file that way. A
+        # plain `run:` step gives bash real glob expansion, and mapping
+        # each output line to a `::error::` workflow command surfaces
+        # findings as real, per-file annotations in the GitHub UI/API,
+        # not just a generic "process exited 1" with the detail buried
+        # in the raw log.
+        run: |
+          set +e
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest \
+            templates/*/ci.yml templates/*/release.yml .github/workflows/*.yml \
+            > actionlint-output.txt 2>&1
+          EXIT_CODE=$?
+          cat actionlint-output.txt
+          while IFS= read -r line; do
+            if echo "$line" | grep -qE '^[A-Za-z0-9_./-]+\.ya?ml:[0-9]+:[0-9]+:'; then
+              echo "::error::$line"
+            fi
+          done < actionlint-output.txt
+          exit $EXIT_CODE
