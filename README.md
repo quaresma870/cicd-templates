@@ -52,7 +52,9 @@ to re-copy and re-diff by hand.
 
 ### Option B — Call (stays in sync, less editable)
 
-Available for `python` so far ([`.github/workflows/python-ci-reusable.yml`](.github/workflows/python-ci-reusable.yml)
+Available for `python` and `nodejs` so far
+([`.github/workflows/python-ci-reusable.yml`](.github/workflows/python-ci-reusable.yml),
+[`.github/workflows/nodejs-ci-reusable.yml`](.github/workflows/nodejs-ci-reusable.yml)
 — GitHub requires reusable workflows to live directly in `.github/workflows/`,
 not under `templates/`, so this is the one exception to this repo's usual layout).
 
@@ -78,6 +80,9 @@ jobs:
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
       # VPS_HOST / VPS_USER / VPS_SSH_KEY / VPS_PORT — only if deploy_target includes vps
 ```
+
+Same shape for Node.js — swap the `uses:` line for
+`nodejs-ci-reusable.yml@main` and `python_version` for `node_version`.
 
 A fix or new best practice landing in `python-ci-reusable.yml` reaches every
 caller automatically next run — at the cost of not being able to tweak a
@@ -162,7 +167,8 @@ cicd-templates/
 │   └── deploy-targets.md
 └── .github/workflows/
     ├── validate.yml                # Validates all template YAMLs on every push
-    └── python-ci-reusable.yml      # Callable alternative to templates/python/ci.yml — see "How to use"
+    ├── python-ci-reusable.yml      # Callable alternative to templates/python/ci.yml — see "How to use"
+    └── nodejs-ci-reusable.yml      # Callable alternative to templates/nodejs/ci.yml — see "How to use"
 ```
 
 ---
