@@ -37,7 +37,7 @@
 # at dispatch time, before any job even starts — confirmed by deliberately
 # reproducing this exact failure while building this file, not assumed.
 #
-# Stages: Lint → Test → Security Scan → Build (+ SBOM + cosign sign) → Deploy
+# Stages: Lint → Test → Security Scan → Build (+ SBOM + cosign sign + SLSA attestation) → Deploy
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Python CI/CD (reusable)
@@ -158,7 +158,8 @@ jobs:
     needs: [test, security]
     permissions:
       contents: read
-      id-token: write   # needed for cosign's keyless OIDC signing below
+      id-token: write     # needed for cosign's keyless OIDC signing + SLSA attestation below
+      attestations: write # needed to publish the SLSA provenance attestation below
     outputs:
       image_tag: ${{ steps.meta.outputs.version }}
       image_full: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
@@ -216,6 +217,13 @@ jobs:
         run: |
           cosign sign --yes \
             "${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+      - name: Generate SLSA provenance attestation
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
   # ── Deploy → VPS ────────────────────────────────────────────────────────────
   deploy-vps:

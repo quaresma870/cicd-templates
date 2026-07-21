@@ -118,11 +118,13 @@ maintain your own copy and are fine with this repo's defaults.
 - **Artifacts** — reports uploaded and retained for 7–30 days
 
 `python/`, `nodejs/`, `generic/`, and `docker-only/` additionally generate a
-software bill of materials and sign the built image on every push to `main`
-(skipped on PR builds, which don't push an image):
+software bill of materials, sign the built image, and attach a SLSA
+provenance attestation on every push to `main` (skipped on PR builds, which
+don't push an image):
 
 - **SBOM** — [Syft](https://github.com/anchore/syft) via `anchore/sbom-action`, SPDX format, uploaded as a workflow artifact
 - **Image signing** — [Cosign](https://github.com/sigstore/cosign) keyless signing via GitHub's OIDC token (no signing key to manage or rotate)
+- **SLSA provenance** — `actions/attest-build-provenance` records which workflow, commit, and inputs produced the image, published as a signed attestation on the image in GHCR
 
 Verify a signed image before pulling it in production:
 
@@ -131,6 +133,12 @@ cosign verify \
   --certificate-identity-regexp "https://github.com/YOUR_ORG/YOUR_REPO/.github/workflows/.*@refs/heads/main" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   ghcr.io/YOUR_ORG/YOUR_IMAGE:latest
+```
+
+Verify its provenance attestation:
+
+```bash
+gh attestation verify oci://ghcr.io/YOUR_ORG/YOUR_IMAGE:latest --owner YOUR_ORG
 ```
 
 ---
