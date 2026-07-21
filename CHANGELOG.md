@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.4.0
+- feat: **reusable `workflow_call` versions of `docker-only` and `generic`** —
+  `.github/workflows/docker-only-ci-reusable.yml` and `generic-ci-reusable.yml`.
+  `docker-only`'s adds a `deploy_target` input so callers can opt out of the
+  VPS deploy job (the copy-paste template always runs it; a caller can't
+  delete a job). `generic`'s exposes `setup_command`/`test_command` shell
+  inputs in place of the copy-paste template's editable placeholder step,
+  since a reusable workflow can't have a caller inject arbitrary `uses:`
+  steps — documented in the file, with a pointer back to copying the
+  template for stacks that need a pinned toolchain action.
+- feat: **SLSA provenance attestation** — `actions/attest-build-provenance@v4`
+  runs alongside the existing SBOM + cosign signing in `python`, `nodejs`,
+  `generic`, and `docker-only` (templates and reusable workflows), recording
+  which workflow/commit/inputs produced the image. README documents
+  `gh attestation verify` alongside the existing `cosign verify` example.
+- feat: **Dependabot auto-merge** — `.github/workflows/dependabot-auto-merge.yml`
+  auto-merges this repo's own Dependabot PRs once CI passes, but only for
+  minor/patch bumps; major bumps get a comment asking for a human review
+  instead. Uses GitHub's documented `dependabot/fetch-metadata` +
+  `gh pr merge --auto` pattern — doesn't bypass CI, needs "Allow auto-merge"
+  enabled in repo settings.
+- feat: **multi-version test matrix for `python` and `nodejs`** — lint/test
+  now run as a `strategy.matrix`. Default is a single-entry matrix (identical
+  cost to before); add entries, or set the reusable workflows'
+  `python_versions`/`node_versions` input, to test multiple runtime versions.
+
 ### v1.3.0
 - feat: **reusable `workflow_call` version of the Node.js template** —
   `.github/workflows/nodejs-ci-reusable.yml`, same tradeoffs and usage
