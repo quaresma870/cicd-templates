@@ -52,9 +52,11 @@ to re-copy and re-diff by hand.
 
 ### Option B — Call (stays in sync, less editable)
 
-Available for `python` and `nodejs` so far
-([`.github/workflows/python-ci-reusable.yml`](.github/workflows/python-ci-reusable.yml),
-[`.github/workflows/nodejs-ci-reusable.yml`](.github/workflows/nodejs-ci-reusable.yml)
+Available for `python`, `nodejs`, `docker-only`, and `generic` so far
+([`python-ci-reusable.yml`](.github/workflows/python-ci-reusable.yml),
+[`nodejs-ci-reusable.yml`](.github/workflows/nodejs-ci-reusable.yml),
+[`docker-only-ci-reusable.yml`](.github/workflows/docker-only-ci-reusable.yml),
+[`generic-ci-reusable.yml`](.github/workflows/generic-ci-reusable.yml)
 — GitHub requires reusable workflows to live directly in `.github/workflows/`,
 not under `templates/`, so this is the one exception to this repo's usual layout).
 
@@ -81,8 +83,21 @@ jobs:
       # VPS_HOST / VPS_USER / VPS_SSH_KEY / VPS_PORT — only if deploy_target includes vps
 ```
 
-Same shape for Node.js — swap the `uses:` line for
-`nodejs-ci-reusable.yml@main` and `python_version` for `node_version`.
+Same shape for Node.js — swap the `uses:` line for `nodejs-ci-reusable.yml@main`
+and `python_version` for `node_version`. For `docker-only`, drop the
+language-version input entirely (there isn't one) and optionally set
+`platform` for multi-arch builds. For `generic`, there's no language runtime
+to configure either — instead pass `setup_command` (installs your stack's
+deps) and `test_command` (runs your tests), e.g.:
+
+```yaml
+    uses: quaresma870/cicd-templates/.github/workflows/generic-ci-reusable.yml@main
+    with:
+      image_name: my-app
+      setup_command: "pip install -r requirements.txt"
+      test_command: "pytest tests/ -v"
+      deploy_target: ghcr
+```
 
 A fix or new best practice landing in `python-ci-reusable.yml` reaches every
 caller automatically next run — at the cost of not being able to tweak a
@@ -100,14 +115,21 @@ maintain your own copy and are fine with this repo's defaults.
 - **Semver tagging** — Docker images tagged by git tag, branch, or SHA
 - **GHA cache** — Docker layer cache via `type=gha` for fast rebuilds
 - **Security scans** — Trivy, pip-audit/npm-audit, Gitleaks, Semgrep, Checkov
+- **Multi-version test matrix** — `python/` and `nodejs/` run lint/test as a
+  `strategy.matrix` (single version by default, zero added CI cost — add more
+  entries to the matrix, or set the reusable workflows' `python_versions` /
+  `node_versions` input, e.g. `'["3.11", "3.12", "3.13"]'`, to test against
+  multiple runtime versions)
 - **Artifacts** — reports uploaded and retained for 7–30 days
 
 `python/`, `nodejs/`, `generic/`, and `docker-only/` additionally generate a
-software bill of materials and sign the built image on every push to `main`
-(skipped on PR builds, which don't push an image):
+software bill of materials, sign the built image, and attach a SLSA
+provenance attestation on every push to `main` (skipped on PR builds, which
+don't push an image):
 
 - **SBOM** — [Syft](https://github.com/anchore/syft) via `anchore/sbom-action`, SPDX format, uploaded as a workflow artifact
 - **Image signing** — [Cosign](https://github.com/sigstore/cosign) keyless signing via GitHub's OIDC token (no signing key to manage or rotate)
+- **SLSA provenance** — `actions/attest-build-provenance` records which workflow, commit, and inputs produced the image, published as a signed attestation on the image in GHCR
 
 Verify a signed image before pulling it in production:
 
@@ -116,6 +138,12 @@ cosign verify \
   --certificate-identity-regexp "https://github.com/YOUR_ORG/YOUR_REPO/.github/workflows/.*@refs/heads/main" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   ghcr.io/YOUR_ORG/YOUR_IMAGE:latest
+```
+
+Verify its provenance attestation:
+
+```bash
+gh attestation verify oci://ghcr.io/YOUR_ORG/YOUR_IMAGE:latest --owner YOUR_ORG
 ```
 
 ---
@@ -166,10 +194,20 @@ cicd-templates/
 │   ├── secrets-setup.md
 │   └── deploy-targets.md
 └── .github/workflows/
-    ├── validate.yml                # Validates all template YAMLs on every push
-    ├── python-ci-reusable.yml      # Callable alternative to templates/python/ci.yml — see "How to use"
-    └── nodejs-ci-reusable.yml      # Callable alternative to templates/nodejs/ci.yml — see "How to use"
+    ├── validate.yml                    # Validates all template YAMLs on every push
+    ├── dependabot-auto-merge.yml       # Auto-merges Dependabot's own minor/patch PRs once CI passes
+    ├── python-ci-reusable.yml          # Callable alternative to templates/python/ci.yml — see "How to use"
+    ├── nodejs-ci-reusable.yml          # Callable alternative to templates/nodejs/ci.yml — see "How to use"
+    ├── docker-only-ci-reusable.yml     # Callable alternative to templates/docker-only/ci.yml — see "How to use"
+    └── generic-ci-reusable.yml         # Callable alternative to templates/generic/ci.yml — see "How to use"
 ```
+
+This repo's own `dependabot.yml` bumps are auto-merged by
+[`dependabot-auto-merge.yml`](.github/workflows/dependabot-auto-merge.yml)
+once `validate.yml` passes — but only for minor/patch action bumps; major
+bumps get a comment asking for a human review instead. Requires
+**"Allow auto-merge"** enabled under this repo's Settings → General (a
+one-time repo setting the workflow itself can't turn on).
 
 ---
 

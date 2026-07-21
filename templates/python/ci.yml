@@ -49,13 +49,19 @@ jobs:
   # ── Lint ────────────────────────────────────────────────────────────────────
   lint:
     timeout-minutes: 10
-    name: Lint
+    name: Lint (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Add more entries to test against multiple Python releases, e.g.:
+        # python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
           cache: pip
       - run: pip install ruff
       - run: ruff check .
@@ -63,14 +69,18 @@ jobs:
   # ── Test ────────────────────────────────────────────────────────────────────
   test:
     timeout-minutes: 20
-    name: Test
+    name: Test (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]   # keep in sync with the lint job's matrix above
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
           cache: pip
       - run: pip install -r requirements.txt
       - name: Run tests with coverage
@@ -80,7 +90,7 @@ jobs:
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
         with:
-          name: coverage-report
+          name: coverage-report-py${{ matrix.python-version }}
           path: coverage.xml
           retention-days: 7
 
@@ -116,7 +126,8 @@ jobs:
     needs: [test, security]
     permissions:
       contents: read
-      id-token: write   # needed for cosign's keyless OIDC signing below
+      id-token: write     # needed for cosign's keyless OIDC signing + SLSA attestation below
+      attestations: write # needed to publish the SLSA provenance attestation below
     outputs:
       image_tag: ${{ steps.meta.outputs.version }}
       image_full: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
@@ -174,6 +185,13 @@ jobs:
         run: |
           cosign sign --yes \
             "${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+      - name: Generate SLSA provenance attestation
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
   # ── Deploy → VPS ────────────────────────────────────────────────────────────
   deploy-vps:

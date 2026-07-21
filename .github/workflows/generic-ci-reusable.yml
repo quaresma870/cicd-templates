@@ -1,16 +1,25 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Python CI/CD Template — REUSABLE (workflow_call) version
+# Generic CI/CD Template — REUSABLE (workflow_call) version
 #
-# This is an ALTERNATIVE to templates/python/ci.yml, not a replacement.
+# This is an ALTERNATIVE to templates/generic/ci.yml, not a replacement.
 # Copying ci.yml gives you a workflow that's fully yours to edit; calling
 # this one means a fix or new best practice landing here reaches every
 # caller automatically, at the cost of being less visible/editable from
 # the consuming repo. See the README's "How to use" section for the
 # tradeoffs and pick whichever fits.
 #
+# NOTE on "generic": the copy-paste template leaves the test job as an
+# editable placeholder you customise per stack. A reusable caller can't
+# inject arbitrary `uses:` steps into somebody else's workflow, so instead
+# this version exposes setup_command / test_command as plain shell strings
+# run on ubuntu-latest (which already ships python3, node, and other common
+# runtimes). If your stack needs a specific pinned toolchain version
+# (uses: actions/setup-python@vX etc.), copy templates/generic/ci.yml
+# instead — that's exactly the case Option A (copy) exists for.
+#
 # NOTE on file location: GitHub Actions requires reusable workflows to live
 # directly in .github/workflows/ — subdirectories aren't supported, so this
-# can't live alongside the copy-paste template at templates/python/ci.yml
+# can't live alongside the copy-paste template at templates/generic/ci.yml
 # the way you might expect. This is the one exception to that convention.
 #
 # Usage from a consuming repo's own workflow:
@@ -22,10 +31,11 @@
 #
 #   jobs:
 #     ci:
-#       uses: quaresma870/cicd-templates/.github/workflows/python-ci-reusable.yml@main
+#       uses: quaresma870/cicd-templates/.github/workflows/generic-ci-reusable.yml@main
 #       with:
-#         python_version: "3.12"
 #         image_name: my-app
+#         setup_command: "pip install -r requirements.txt"
+#         test_command: "pytest tests/ -v"
 #         deploy_target: vps
 #         deploy_path: /opt/my-app
 #       secrets: inherit   # or pass each secret explicitly, see below
@@ -34,29 +44,29 @@
 # workflow's permissions are a CEILING on what the called workflow's jobs
 # can be granted. Omitting id-token: write on the CALLER causes the build
 # job's cosign signing step to fail with an opaque "workflow file issue"
-# at dispatch time, before any job even starts — confirmed by deliberately
-# reproducing this exact failure while building this file, not assumed.
+# at dispatch time, before any job even starts — see python-ci-reusable.yml
+# for how this was confirmed.
 #
-# Stages: Lint → Test → Security Scan → Build (+ SBOM + cosign sign + SLSA attestation) → Deploy
+# Stages: Validate → Test → Security Scan → Build (+ SBOM + cosign sign + SLSA attestation) → Deploy
 # ──────────────────────────────────────────────────────────────────────────────
 
-name: Python CI/CD (reusable)
+name: Generic CI/CD (reusable)
 
 on:
   workflow_call:
     inputs:
-      python_version:
-        description: "Python version used everywhere except the lint/test matrix (security scan, etc.)"
-        type: string
-        default: "3.11"
-      python_versions:
-        description: "JSON array of Python versions the lint/test jobs run a matrix against"
-        type: string
-        default: '["3.11"]'
       image_name:
         description: "Docker image name (without registry/owner prefix)"
         type: string
         default: "app"
+      setup_command:
+        description: "Optional shell command to install your stack's toolchain/deps, run before test_command (e.g. 'pip install -r requirements.txt')"
+        type: string
+        default: ""
+      test_command:
+        description: "Shell command that runs your tests"
+        type: string
+        default: 'echo "Add a test_command input — see README"'
       deploy_target:
         description: "Where to deploy after a successful build on main"
         type: string
@@ -65,10 +75,6 @@ on:
         description: "Path on the VPS where docker-compose.yml lives (required if deploy_target includes vps)"
         type: string
         default: ""
-      coverage_threshold:
-        description: "Minimum test coverage percentage required to pass"
-        type: number
-        default: 70
     secrets:
       GHCR_TOKEN:
         description: "GitHub token with packages:write scope — required"
@@ -87,82 +93,69 @@ permissions:
   contents: read
 
 env:
-  PYTHON_VERSION: ${{ inputs.python_version }}
   IMAGE_NAME: ${{ inputs.image_name }}
   REGISTRY: ghcr.io
 
 jobs:
-  # ── Lint ────────────────────────────────────────────────────────────────────
-  lint:
+  # ── Validate ─────────────────────────────────────────────────────────────────
+  validate:
     timeout-minutes: 10
-    name: Lint (py${{ matrix.python-version }})
+    name: Validate
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ${{ fromJSON(inputs.python_versions) }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-      - run: pip install ruff
-      - run: ruff check .
+      - name: Validate shell scripts
+        run: |
+          find . -name "*.sh" -not -path "./.git/*" | while read -r f; do
+            bash -n "$f" && echo "OK: $f" || exit 1
+          done
+      - name: Validate YAML files
+        run: |
+          pip install yamllint -q
+          find . -name "*.yml" -o -name "*.yaml" | grep -v ".git" | \
+            xargs yamllint -d '{extends: relaxed, rules: {line-length: {max: 120}}}' || true
+      - name: Check for secrets in code (basic)
+        run: |
+          if grep -rE "(password|secret|api_key|token)\s*=\s*['\"][^'\"]{8,}" \
+            --include="*.py" --include="*.js" --include="*.ts" \
+            --exclude-dir=".git" --exclude-dir="node_modules" .; then
+            echo "WARNING: Possible hardcoded secrets detected."
+            exit 1
+          fi
+          echo "No hardcoded secrets found."
 
-  # ── Test ────────────────────────────────────────────────────────────────────
+  # ── Test ─────────────────────────────────────────────────────────────────────
   test:
     timeout-minutes: 20
-    name: Test (py${{ matrix.python-version }})
+    name: Test
     runs-on: ubuntu-latest
-    needs: lint
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ${{ fromJSON(inputs.python_versions) }}
+    needs: validate
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-      - run: pip install -r requirements.txt
-      - name: Run tests with coverage
-        run: pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-fail-under=${{ inputs.coverage_threshold }}
-        env:
-          ENVIRONMENT: test
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-report-py${{ matrix.python-version }}
-          path: coverage.xml
-          retention-days: 7
+      - name: Run setup_command
+        if: inputs.setup_command != ''
+        run: ${{ inputs.setup_command }}
+      - name: Run test_command
+        run: ${{ inputs.test_command }}
 
-  # ── Security Scan ───────────────────────────────────────────────────────────
+  # ── Security Scan ────────────────────────────────────────────────────────────
   security:
     timeout-minutes: 15
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: lint
+    needs: validate
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - name: Run Trivy vulnerability scanner (filesystem)
+        uses: aquasecurity/trivy-action@0.29.0
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-      - name: Audit dependencies (pip-audit)
-        run: |
-          pip install pip-audit
-          pip-audit -r requirements.txt --format=json -o pip-audit-report.json || true
-          pip-audit -r requirements.txt
-      - name: Upload audit report
-        uses: actions/upload-artifact@v7
-        with:
-          name: pip-audit-report
-          path: pip-audit-report.json
-          retention-days: 7
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: "0"
+          severity: CRITICAL,HIGH
 
-  # ── Build ───────────────────────────────────────────────────────────────────
+  # ── Build ────────────────────────────────────────────────────────────────────
   build:
     timeout-minutes: 30
     name: Build Docker image
@@ -237,7 +230,7 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
-  # ── Deploy → VPS ────────────────────────────────────────────────────────────
+  # ── Deploy → VPS ─────────────────────────────────────────────────────────────
   deploy-vps:
     timeout-minutes: 15
     name: Deploy to VPS
@@ -247,11 +240,6 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.event_name != 'pull_request' &&
       (inputs.deploy_target == 'vps' || inputs.deploy_target == 'both')
-    # NOTE: environment.url deliberately does NOT reference secrets.VPS_HOST —
-    # the environment block's fields don't support the secrets context, and
-    # doing so fails the entire workflow at dispatch time, before any job
-    # runs, with an opaque "workflow file issue" — confirmed by deliberately
-    # reproducing this exact failure while building this file, not assumed.
     environment:
       name: production
     steps:
