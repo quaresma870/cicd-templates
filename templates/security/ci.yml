@@ -44,7 +44,7 @@ jobs:
     name: Secrets Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # Full history for Gitleaks
       - name: Scan for secrets with Gitleaks
@@ -59,8 +59,8 @@ jobs:
     name: Python Dependency Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Check for requirements file
@@ -80,7 +80,7 @@ jobs:
           pip-audit -r requirements.txt || pip-audit
       - name: Upload audit report
         if: steps.check.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pip-audit-report
           path: pip-audit.json
@@ -92,7 +92,7 @@ jobs:
     name: Node.js Dependency Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Check for package.json
         id: check
         run: |
@@ -114,7 +114,7 @@ jobs:
           npm audit --audit-level=high
       - name: Upload audit report
         if: steps.check.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: npm-audit-report
           path: npm-audit.json
@@ -126,7 +126,7 @@ jobs:
     name: SAST (Semgrep)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Run Semgrep
         uses: semgrep/semgrep-action@v1
         with:
@@ -145,7 +145,7 @@ jobs:
     name: Trivy Filesystem Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Run Trivy on filesystem
         uses: aquasecurity/trivy-action@0.29.0
         with:
@@ -156,7 +156,7 @@ jobs:
           severity: ${{ env.SEVERITY }},CRITICAL
           exit-code: "0"
       - name: Upload Trivy FS results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: trivy-fs-report
           path: trivy-fs-results.sarif
@@ -169,7 +169,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
       - name: Build image for scanning
         uses: docker/build-push-action@v7
@@ -190,7 +190,7 @@ jobs:
           vuln-type: os,library
         continue-on-error: true
       - name: Upload container scan results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: trivy-image-report
           path: trivy-image-results.sarif
@@ -202,7 +202,7 @@ jobs:
     name: Generate SBOM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Generate SBOM with Syft
         uses: anchore/sbom-action@v0
         with:
@@ -210,7 +210,7 @@ jobs:
           format: spdx-json
           output-file: sbom.spdx.json
       - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom.spdx.json
