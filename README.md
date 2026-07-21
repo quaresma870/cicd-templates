@@ -115,6 +115,11 @@ maintain your own copy and are fine with this repo's defaults.
 - **Semver tagging** — Docker images tagged by git tag, branch, or SHA
 - **GHA cache** — Docker layer cache via `type=gha` for fast rebuilds
 - **Security scans** — Trivy, pip-audit/npm-audit, Gitleaks, Semgrep, Checkov
+- **Multi-version test matrix** — `python/` and `nodejs/` run lint/test as a
+  `strategy.matrix` (single version by default, zero added CI cost — add more
+  entries to the matrix, or set the reusable workflows' `python_versions` /
+  `node_versions` input, e.g. `'["3.11", "3.12", "3.13"]'`, to test against
+  multiple runtime versions)
 - **Artifacts** — reports uploaded and retained for 7–30 days
 
 `python/`, `nodejs/`, `generic/`, and `docker-only/` additionally generate a
