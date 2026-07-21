@@ -1,0 +1,266 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Generic CI/CD Template — REUSABLE (workflow_call) version
+#
+# This is an ALTERNATIVE to templates/generic/ci.yml, not a replacement.
+# Copying ci.yml gives you a workflow that's fully yours to edit; calling
+# this one means a fix or new best practice landing here reaches every
+# caller automatically, at the cost of being less visible/editable from
+# the consuming repo. See the README's "How to use" section for the
+# tradeoffs and pick whichever fits.
+#
+# NOTE on "generic": the copy-paste template leaves the test job as an
+# editable placeholder you customise per stack. A reusable caller can't
+# inject arbitrary `uses:` steps into somebody else's workflow, so instead
+# this version exposes setup_command / test_command as plain shell strings
+# run on ubuntu-latest (which already ships python3, node, and other common
+# runtimes). If your stack needs a specific pinned toolchain version
+# (uses: actions/setup-python@vX etc.), copy templates/generic/ci.yml
+# instead — that's exactly the case Option A (copy) exists for.
+#
+# NOTE on file location: GitHub Actions requires reusable workflows to live
+# directly in .github/workflows/ — subdirectories aren't supported, so this
+# can't live alongside the copy-paste template at templates/generic/ci.yml
+# the way you might expect. This is the one exception to that convention.
+#
+# Usage from a consuming repo's own workflow:
+#
+#   permissions:
+#     contents: read
+#     id-token: write    # REQUIRED — see note below
+#     packages: write    # only if deploy_target includes 'ghcr'
+#
+#   jobs:
+#     ci:
+#       uses: quaresma870/cicd-templates/.github/workflows/generic-ci-reusable.yml@main
+#       with:
+#         image_name: my-app
+#         setup_command: "pip install -r requirements.txt"
+#         test_command: "pytest tests/ -v"
+#         deploy_target: vps
+#         deploy_path: /opt/my-app
+#       secrets: inherit   # or pass each secret explicitly, see below
+#
+# ⚠️ The permissions: block above is NOT optional decoration — a calling
+# workflow's permissions are a CEILING on what the called workflow's jobs
+# can be granted. Omitting id-token: write on the CALLER causes the build
+# job's cosign signing step to fail with an opaque "workflow file issue"
+# at dispatch time, before any job even starts — see python-ci-reusable.yml
+# for how this was confirmed.
+#
+# Stages: Validate → Test → Security Scan → Build (+ SBOM + cosign sign) → Deploy
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Generic CI/CD (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        description: "Docker image name (without registry/owner prefix)"
+        type: string
+        default: "app"
+      setup_command:
+        description: "Optional shell command to install your stack's toolchain/deps, run before test_command (e.g. 'pip install -r requirements.txt')"
+        type: string
+        default: ""
+      test_command:
+        description: "Shell command that runs your tests"
+        type: string
+        default: 'echo "Add a test_command input — see README"'
+      deploy_target:
+        description: "Where to deploy after a successful build on main"
+        type: string
+        default: "ghcr"   # ghcr | vps | both | none
+      deploy_path:
+        description: "Path on the VPS where docker-compose.yml lives (required if deploy_target includes vps)"
+        type: string
+        default: ""
+    secrets:
+      GHCR_TOKEN:
+        description: "GitHub token with packages:write scope — required"
+        required: true
+      VPS_HOST:
+        description: "SSH host — required only if deploy_target includes vps"
+        required: false
+      VPS_USER:
+        required: false
+      VPS_SSH_KEY:
+        required: false
+      VPS_PORT:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ${{ inputs.image_name }}
+  REGISTRY: ghcr.io
+
+jobs:
+  # ── Validate ─────────────────────────────────────────────────────────────────
+  validate:
+    timeout-minutes: 10
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate shell scripts
+        run: |
+          find . -name "*.sh" -not -path "./.git/*" | while read -r f; do
+            bash -n "$f" && echo "OK: $f" || exit 1
+          done
+      - name: Validate YAML files
+        run: |
+          pip install yamllint -q
+          find . -name "*.yml" -o -name "*.yaml" | grep -v ".git" | \
+            xargs yamllint -d '{extends: relaxed, rules: {line-length: {max: 120}}}' || true
+      - name: Check for secrets in code (basic)
+        run: |
+          if grep -rE "(password|secret|api_key|token)\s*=\s*['\"][^'\"]{8,}" \
+            --include="*.py" --include="*.js" --include="*.ts" \
+            --exclude-dir=".git" --exclude-dir="node_modules" .; then
+            echo "WARNING: Possible hardcoded secrets detected."
+            exit 1
+          fi
+          echo "No hardcoded secrets found."
+
+  # ── Test ─────────────────────────────────────────────────────────────────────
+  test:
+    timeout-minutes: 20
+    name: Test
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run setup_command
+        if: inputs.setup_command != ''
+        run: ${{ inputs.setup_command }}
+      - name: Run test_command
+        run: ${{ inputs.test_command }}
+
+  # ── Security Scan ────────────────────────────────────────────────────────────
+  security:
+    timeout-minutes: 15
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run Trivy vulnerability scanner (filesystem)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: "0"
+          severity: CRITICAL,HIGH
+
+  # ── Build ────────────────────────────────────────────────────────────────────
+  build:
+    timeout-minutes: 30
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    permissions:
+      contents: read
+      id-token: write   # needed for cosign's keyless OIDC signing below
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      image_full: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=branch
+            type=sha,prefix=sha-
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── SBOM + signing — skipped on PR builds, which don't push an image ──────
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+      - name: Upload SBOM artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom
+          path: sbom.spdx.json
+          retention-days: 90
+      - name: Install Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+      - name: Sign the image (keyless, via GitHub OIDC)
+        if: github.event_name != 'pull_request'
+        run: |
+          cosign sign --yes \
+            "${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+
+  # ── Deploy → VPS ─────────────────────────────────────────────────────────────
+  deploy-vps:
+    timeout-minutes: 15
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      (inputs.deploy_target == 'vps' || inputs.deploy_target == 'both')
+    environment:
+      name: production
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            cd ${{ inputs.deploy_path }}
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ${{ needs.build.outputs.image_full }}
+            docker compose up -d --no-build
+            docker system prune -f
+
+      - name: Wait for application to be healthy
+        run: |
+          echo "Waiting for application health check..."
+          MAX_WAIT=60
+          ELAPSED=0
+          until curl -sf "https://${{ secrets.VPS_HOST }}/health" > /dev/null 2>&1; do
+            if [ $ELAPSED -ge $MAX_WAIT ]; then
+              echo "Health check timed out after ${MAX_WAIT}s — rolling back"
+              exit 1
+            fi
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+            echo "  Waited ${ELAPSED}s..."
+          done
+          echo "Application is healthy!"

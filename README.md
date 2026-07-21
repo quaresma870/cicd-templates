@@ -52,9 +52,11 @@ to re-copy and re-diff by hand.
 
 ### Option B — Call (stays in sync, less editable)
 
-Available for `python` and `nodejs` so far
-([`.github/workflows/python-ci-reusable.yml`](.github/workflows/python-ci-reusable.yml),
-[`.github/workflows/nodejs-ci-reusable.yml`](.github/workflows/nodejs-ci-reusable.yml)
+Available for `python`, `nodejs`, `docker-only`, and `generic` so far
+([`python-ci-reusable.yml`](.github/workflows/python-ci-reusable.yml),
+[`nodejs-ci-reusable.yml`](.github/workflows/nodejs-ci-reusable.yml),
+[`docker-only-ci-reusable.yml`](.github/workflows/docker-only-ci-reusable.yml),
+[`generic-ci-reusable.yml`](.github/workflows/generic-ci-reusable.yml)
 — GitHub requires reusable workflows to live directly in `.github/workflows/`,
 not under `templates/`, so this is the one exception to this repo's usual layout).
 
@@ -81,8 +83,21 @@ jobs:
       # VPS_HOST / VPS_USER / VPS_SSH_KEY / VPS_PORT — only if deploy_target includes vps
 ```
 
-Same shape for Node.js — swap the `uses:` line for
-`nodejs-ci-reusable.yml@main` and `python_version` for `node_version`.
+Same shape for Node.js — swap the `uses:` line for `nodejs-ci-reusable.yml@main`
+and `python_version` for `node_version`. For `docker-only`, drop the
+language-version input entirely (there isn't one) and optionally set
+`platform` for multi-arch builds. For `generic`, there's no language runtime
+to configure either — instead pass `setup_command` (installs your stack's
+deps) and `test_command` (runs your tests), e.g.:
+
+```yaml
+    uses: quaresma870/cicd-templates/.github/workflows/generic-ci-reusable.yml@main
+    with:
+      image_name: my-app
+      setup_command: "pip install -r requirements.txt"
+      test_command: "pytest tests/ -v"
+      deploy_target: ghcr
+```
 
 A fix or new best practice landing in `python-ci-reusable.yml` reaches every
 caller automatically next run — at the cost of not being able to tweak a
@@ -166,9 +181,11 @@ cicd-templates/
 │   ├── secrets-setup.md
 │   └── deploy-targets.md
 └── .github/workflows/
-    ├── validate.yml                # Validates all template YAMLs on every push
-    ├── python-ci-reusable.yml      # Callable alternative to templates/python/ci.yml — see "How to use"
-    └── nodejs-ci-reusable.yml      # Callable alternative to templates/nodejs/ci.yml — see "How to use"
+    ├── validate.yml                    # Validates all template YAMLs on every push
+    ├── python-ci-reusable.yml          # Callable alternative to templates/python/ci.yml — see "How to use"
+    ├── nodejs-ci-reusable.yml          # Callable alternative to templates/nodejs/ci.yml — see "How to use"
+    ├── docker-only-ci-reusable.yml     # Callable alternative to templates/docker-only/ci.yml — see "How to use"
+    └── generic-ci-reusable.yml         # Callable alternative to templates/generic/ci.yml — see "How to use"
 ```
 
 ---
