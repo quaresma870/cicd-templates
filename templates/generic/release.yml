@@ -34,7 +34,7 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_TOKEN }}
@@ -45,7 +45,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       # ── Option A: Python (python-semantic-release) ───────────────────────
-      # - uses: actions/setup-python@v6
+      # - uses: actions/setup-python@v7
       #   with:
       #     python-version: "3.11"
       # - run: pip install python-semantic-release

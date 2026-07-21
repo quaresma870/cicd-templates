@@ -57,7 +57,7 @@ The `generic/ci.yml` has placeholder steps for the test stage. Replace the place
   run: echo "Add your test command here"
 
 # After (Python example)
-- uses: actions/setup-python@v6
+- uses: actions/setup-python@v7
   with:
     python-version: "3.11"
     cache: pip

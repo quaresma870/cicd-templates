@@ -1,5 +1,10 @@
 version: 2
 updates:
+  # NOTE: this only scans workflow files under .github/workflows/ — the
+  # actions pinned inside templates/*.yml are copy-paste examples, not
+  # workflows this repo runs, so Dependabot can't see or bump them. Keep
+  # those in sync by hand when a PR here bumps the same action
+  # (see CONTRIBUTING.md).
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -8,3 +13,7 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - maintenance
+    groups:
+      github-actions:
+        patterns:
+          - "*"

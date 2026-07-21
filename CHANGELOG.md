@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.3.0
+- feat: **reusable `workflow_call` version of the Node.js template** —
+  `.github/workflows/nodejs-ci-reusable.yml`, same tradeoffs and usage
+  pattern as `python-ci-reusable.yml` (see README "How to use").
+- fix: **templates/ action versions had drifted from `.github/workflows/`** —
+  Dependabot only scans `.github/workflows/`, so its recent bumps
+  (`actions/checkout` v6→v7, `actions/setup-python` v6→v7,
+  `actions/upload-artifact` v4→v7, `appleboy/ssh-action` v1.2.0→v1.2.5)
+  never reached the copy-paste templates. Synced all `templates/*.yml` and
+  `templates/*/release.yml` to match, and documented the gap in
+  `CONTRIBUTING.md` so it's checked by hand going forward.
+- chore: **Dependabot groups all `github-actions` bumps into a single weekly
+  PR** instead of one PR per dependency.
+- docs: added `CONTRIBUTING.md` and `.github/CODEOWNERS`.
+
 ### v1.2.0
 - fix: **6 real bugs — secrets referenced where the context isn't available** — 5 templates
   (python, docker-only, generic, nodejs, ansible) referenced `${{ secrets.VPS_HOST }}` (or
