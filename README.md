@@ -190,11 +190,19 @@ cicd-templates/
 │   └── deploy-targets.md
 └── .github/workflows/
     ├── validate.yml                    # Validates all template YAMLs on every push
+    ├── dependabot-auto-merge.yml       # Auto-merges Dependabot's own minor/patch PRs once CI passes
     ├── python-ci-reusable.yml          # Callable alternative to templates/python/ci.yml — see "How to use"
     ├── nodejs-ci-reusable.yml          # Callable alternative to templates/nodejs/ci.yml — see "How to use"
     ├── docker-only-ci-reusable.yml     # Callable alternative to templates/docker-only/ci.yml — see "How to use"
     └── generic-ci-reusable.yml         # Callable alternative to templates/generic/ci.yml — see "How to use"
 ```
+
+This repo's own `dependabot.yml` bumps are auto-merged by
+[`dependabot-auto-merge.yml`](.github/workflows/dependabot-auto-merge.yml)
+once `validate.yml` passes — but only for minor/patch action bumps; major
+bumps get a comment asking for a human review instead. Requires
+**"Allow auto-merge"** enabled under this repo's Settings → General (a
+one-time repo setting the workflow itself can't turn on).
 
 ---
 
