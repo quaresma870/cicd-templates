@@ -115,6 +115,18 @@ maintain your own copy and are fine with this repo's defaults.
 - **Semver tagging** — Docker images tagged by git tag, branch, or SHA
 - **GHA cache** — Docker layer cache via `type=gha` for fast rebuilds
 - **Security scans** — Trivy, pip-audit/npm-audit, Gitleaks, Semgrep, Checkov
+- **Hardened runners** — every job's first step is
+  [`step-security/harden-runner`](https://github.com/step-security/harden-runner),
+  monitoring network egress and file/process activity on the runner.
+  Ships in `egress-policy: audit` (logs, never blocks) since these are
+  generic templates — tighten it to `egress-policy: block` with an
+  explicit `allowed-endpoints` list once you know your job's real network
+  needs.
+- **Actions pinned by commit SHA** — every `uses:` line pins the exact
+  commit (with the version kept as a `# vX.Y.Z` comment for readability),
+  not a mutable tag — closes the supply-chain gap where a compromised
+  upstream maintainer could re-point an existing tag to different content.
+  Dependabot keeps these SHA pins current automatically.
 - **Multi-version test matrix** — `python/` and `nodejs/` run lint/test as a
   `strategy.matrix` (single version by default, zero added CI cost — add more
   entries to the matrix, or set the reusable workflows' `python_versions` /
