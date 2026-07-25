@@ -223,7 +223,8 @@ one-time repo setting the workflow itself can't turn on).
 
 ---
 
-See [CHANGELOG.md](CHANGELOG.md) for release history.
+See [CHANGELOG.md](CHANGELOG.md) for release history and [ROADMAP.md](ROADMAP.md)
+for what's planned next.
 
 ---
 
