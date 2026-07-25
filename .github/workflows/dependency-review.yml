@@ -1,0 +1,33 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Dependency Review
+#
+# Blocks a PR from merging if it introduces a dependency with a known
+# vulnerability — compares the dependency graph between the PR's base and
+# head. This repo has no application package manifests (no package.json,
+# requirements.txt, etc.), so in practice this only covers the
+# github-actions ecosystem: GitHub's dependency graph tracks action
+# references, but ONLY inside .github/workflows/ — the exact same scope
+# limit Dependabot has here (see CONTRIBUTING.md). It cannot see the
+# actions pinned inside templates/*.yml, since those aren't real workflows
+# this repo executes.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Dependency Review
+
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Dependency Review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0

@@ -6,9 +6,9 @@ themselves aren't strictly sequential — pick whatever's most useful next.
 
 ## 1. Repo process & supply-chain polish
 
-- [ ] `actions/dependency-review-action` on this repo's own PRs — blocks
+- [x] `actions/dependency-review-action` on this repo's own PRs — blocks
       introducing a dependency with a known vulnerability before merge.
-- [ ] OpenSSF Scorecard for this repo itself (not just the `nodejs`
+- [x] OpenSSF Scorecard for this repo itself (not just the `nodejs`
       template) — publishes a security score badge for `cicd-templates`.
 - [ ] Dogfood a real release flow — on `vX.Y.Z` tag push, a workflow
       creates a GitHub Release whose body is exactly that version's

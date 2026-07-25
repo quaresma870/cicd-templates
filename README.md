@@ -1,6 +1,7 @@
 # ⚙️ CI/CD Templates
 
 [![Validate Templates](https://github.com/quaresma870/cicd-templates/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/quaresma870/cicd-templates/actions/workflows/validate.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/quaresma870/cicd-templates/badge)](https://securityscorecards.dev/viewer/?uri=github.com/quaresma870/cicd-templates)
 ![Node.js](https://img.shields.io/badge/GitHub%20Actions-Node.js%2024-brightgreen?logo=nodedotjs&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
