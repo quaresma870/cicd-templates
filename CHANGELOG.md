@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.5.0
+- fix(security): **all third-party actions pinned to commit SHA, not a
+  mutable tag** — closes a supply-chain gap flagged by a cross-repo
+  security review (#20): a compromised or malicious upstream maintainer
+  could otherwise re-point an existing tag to different content without
+  this repo's workflow files changing at all. Every `uses:` line across
+  `templates/` and `.github/workflows/` now pins the exact commit SHA
+  (resolved via `git ls-remote` against the real upstream repo), with the
+  human-readable tag kept as a trailing comment. Also re-closed the
+  `templates/` vs `.github/workflows/` version drift that had crept back
+  in since v1.3.0 (`actions/setup-node`, `aquasecurity/trivy-action`,
+  `docker/setup-qemu-action`, `hadolint/hadolint-action`,
+  `ossf/scorecard-action`) before pinning, so there's one canonical
+  version per action.
+- fix(security): **`step-security/harden-runner` added as the first step
+  of every job** (#20), across every template, reusable workflow,
+  `validate.yml`, and `dependabot-auto-merge.yml`. Ships in
+  `egress-policy: audit` (logs, never blocks) since these are generic
+  templates with per-consumer dependency needs — tighten to `block` with
+  an explicit `allowed-endpoints` list once you know your job's real
+  network footprint.
+
 ### v1.4.0
 - feat: **reusable `workflow_call` versions of `docker-only` and `generic`** —
   `.github/workflows/docker-only-ci-reusable.yml` and `generic-ci-reusable.yml`.

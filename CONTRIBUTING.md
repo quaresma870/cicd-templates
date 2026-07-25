@@ -19,20 +19,29 @@ Thanks for considering a contribution to these CI/CD templates.
 
 1. Keep the stage structure consistent with the other templates (see the
    table in the README) unless the stack genuinely doesn't need a stage.
-2. Pin third-party actions to a specific version (`@vX` or `@vX.Y.Z`), never
-   a floating tag like `@main` or `@latest`.
-3. If you touch a step that reads a secret inside `environment.url` or an
+2. Pin third-party actions to the exact commit SHA, never a floating tag
+   like `@main`, `@latest`, or even a version tag like `@v7` on its own —
+   tags are mutable. Resolve the SHA for the tag you actually want with
+   `git ls-remote <repo-url> refs/tags/<tag>` (don't guess or hallucinate a
+   SHA), then pin it with the tag kept as a trailing comment for
+   readability: `uses: owner/repo@<sha> # v7`. Dependabot understands this
+   format and keeps the SHA current automatically.
+3. Every job's first step should be `step-security/harden-runner` with
+   `egress-policy: audit` (see any existing job for the exact block) —
+   monitors network egress without blocking anything, so it's always safe
+   to add.
+4. If you touch a step that reads a secret inside `environment.url` or an
    `if:` condition, remember `secrets` is **not** available in those two
    contexts — route it through a step output or an `env:` var instead (see
    the existing `Compute environment URL` steps for the pattern). This has
    been a real, shipped bug here before (see CHANGELOG v1.2.0).
-4. Run yamllint and actionlint locally before opening a PR:
+5. Run yamllint and actionlint locally before opening a PR:
    ```bash
    pip install yamllint
    yamllint -d '{extends: relaxed, rules: {line-length: {max: 150}}}' templates/<stack>/ci.yml
    docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest templates/<stack>/ci.yml
    ```
-5. Update the README's template table and `docs/secrets-setup.md` if you add
+6. Update the README's template table and `docs/secrets-setup.md` if you add
    new required secrets or variables.
 
 ## Keeping action versions in sync
