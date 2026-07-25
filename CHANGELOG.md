@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.6.0
+- feat: **`dependency-review-action` on this repo's own PRs**
+  (`.github/workflows/dependency-review.yml`) — blocks merging a PR that
+  introduces a dependency with a known vulnerability. Same scope caveat as
+  Dependabot: only covers `.github/workflows/`, since GitHub's dependency
+  graph doesn't see the actions pinned inside `templates/*.yml`.
+- feat: **OpenSSF Scorecard for this repo itself**
+  (`.github/workflows/scorecard.yml`) — distinct from the existing
+  `ossf/scorecard-action` step inside the `nodejs` template (which scores
+  whatever repo *adopts* that template); this one scores `cicd-templates`
+  and publishes a badge in the README.
+- docs: added `ROADMAP.md`.
+
 ### v1.5.0
 - fix(security): **all third-party actions pinned to commit SHA, not a
   mutable tag** — closes a supply-chain gap flagged by a cross-repo
