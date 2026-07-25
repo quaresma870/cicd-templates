@@ -10,6 +10,13 @@
 # limit Dependabot has here (see CONTRIBUTING.md). It cannot see the
 # actions pinned inside templates/*.yml, since those aren't real workflows
 # this repo executes.
+#
+# REQUIRES "Dependency graph" enabled under this repo's Settings → Code
+# security and analysis — the action hard-errors (not a no-op) if that's
+# off, which is exactly what happened the first time this workflow ran
+# here. continue-on-error keeps that from permanently red-X-ing every PR
+# until the setting is flipped; remove it once "Dependency graph" is
+# confirmed on.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Dependency Review
@@ -31,3 +38,4 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Dependency Review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        continue-on-error: true
