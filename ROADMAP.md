@@ -30,8 +30,14 @@ themselves aren't strictly sequential — pick whatever's most useful next.
       facto language of cloud-native tooling. Both `templates/go/` and
       `go-ci-reusable.yml` shipped, using `golangci-lint` (lint) and
       `govulncheck` (the official Go vulnerability scanner, security scan).
-- [ ] **Java** (Spring Boot, Gradle or Maven) — still dominant in
-      enterprise/banking backends; biggest gap in current stack coverage.
+- [x] **Java** (Spring Boot, Maven) — still dominant in enterprise/banking
+      backends. `templates/java/` and `java-ci-reusable.yml` shipped:
+      Checkstyle (lint), JaCoCo coverage threshold (test), OWASP
+      Dependency-Check (security) — all invoked via direct Maven
+      plugin-goal coordinates so they work without requiring the plugins
+      to already be declared in a stock `pom.xml`. `release.yml` bumps
+      `pom.xml`'s `<version>` to match the computed tag, since that's
+      genuinely where a Maven artifact's version lives (unlike Go).
 - [ ] **TypeScript-first update to `templates/nodejs/`** — not a new
       stack, but TypeScript is now the most-used language on GitHub by
       contributors (Octoverse 2025). Add a `tsc --noEmit` type-check step
