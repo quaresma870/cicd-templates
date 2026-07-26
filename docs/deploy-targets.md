@@ -1,6 +1,7 @@
 # Deploy Targets
 
-All templates support two deploy targets: **GHCR** (GitHub Container Registry) and **VPS via SSH**.
+All templates support **GHCR** (GitHub Container Registry), **VPS via SSH**,
+and **Fly.io**.
 
 ---
 
@@ -101,6 +102,35 @@ Docker Compose will wait for the health check before switching traffic.
 
 ---
 
+## Fly.io
+
+`deploy_target: fly` runs `flyctl deploy --remote-only`, which builds the
+image on Fly's own remote builder straight from your repo's `Dockerfile` and
+deploys it — it does **not** reuse the image the `build` job already pushed
+to GHCR. That's a deliberate tradeoff: Fly.io has no clean native way to
+authenticate to a *private* GHCR image at deploy time (a long-standing gap
+per Fly's own community forum), so building directly from the Dockerfile
+sidesteps that friction entirely, at the cost of building the image twice.
+
+### Prerequisites
+
+1. A `fly.toml` in the repo root — run `fly launch` locally once to generate
+   it (this also creates the Fly app). The templates don't create this file
+   for you.
+2. A `FLY_API_TOKEN` secret — see [secrets-setup.md](secrets-setup.md#deploying-to-flyio).
+
+### How deploy works
+
+1. `superfly/flyctl-actions/setup-flyctl` installs the Fly CLI
+2. `flyctl deploy --remote-only` builds from `Dockerfile` on Fly's builder
+   and deploys, using `fly.toml` for app name, region, and service config
+
+Unlike `vps`, `fly` isn't combined by `deploy_target: both` — it's always
+selected on its own, since it doesn't share GHCR's pushed image the way
+`ghcr`+`vps` do.
+
+---
+
 ## Choosing a target
 
 | Scenario | Recommended target |
@@ -108,4 +138,5 @@ Docker Compose will wait for the health check before switching traffic.
 | Just want image versioning | GHCR only |
 | Self-hosted server | VPS SSH |
 | Both image registry + deploy | Both (default) |
+| No server to manage | Fly.io |
 | Testing / no server yet | `none` (via `workflow_dispatch` input) |

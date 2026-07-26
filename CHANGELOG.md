@@ -3,6 +3,27 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.15.0
+- feat: **Fly.io deploy target** — first item of `ROADMAP.md`'s
+  "Additional deploy targets" section. All 5 copy-paste templates
+  (`python`, `nodejs`, `go`, `java`, `generic`) and all 6 reusable
+  workflows (adding `docker-only-ci-reusable.yml`) gain a `fly` option
+  alongside `ghcr | vps | both | none`, plus a new `deploy-fly` job.
+  Unlike `ghcr`/`vps`, `deploy-fly` doesn't reuse the image `build`
+  already pushed to GHCR — it runs `flyctl deploy --remote-only`, which
+  builds straight from the repo's `Dockerfile` on Fly's own remote
+  builder. This is a deliberate tradeoff: Fly.io has no clean native way
+  to authenticate to a *private* GHCR image at deploy time (a
+  long-standing gap per Fly's own community forum), so building directly
+  sidesteps that friction, at the cost of building the image twice.
+  `fly` is always selected on its own — it isn't folded into
+  `deploy_target: both` the way `ghcr`+`vps` are.
+  `superfly/flyctl-actions/setup-flyctl`'s SHA confirmed as a lightweight
+  tag (no `^{}` peeling needed) before pinning.
+  `docs/secrets-setup.md` and `docs/deploy-targets.md` document the new
+  `FLY_API_TOKEN` secret and the `fly.toml` prerequisite (`fly launch`).
+  README and `ROADMAP.md` updated.
+
 ### v1.14.0
 - feat: **TypeScript-first update to the Node.js template** — TypeScript
   is now the most-used language on GitHub by contributors (Octoverse
