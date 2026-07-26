@@ -44,10 +44,17 @@ themselves aren't strictly sequential — pick whatever's most useful next.
       alongside `npm run lint`; the reusable workflow exposes a
       `type_check` input (default `true`) since a plain-JS caller can't
       delete a job's step the way a copy-paste template user can.
-- [ ] **Rust** — smaller current usage but the most-admired language on
+- [x] **Rust** — smaller current usage but the most-admired language on
       Stack Overflow for years running and moving into real production
       in 2026; minimal container images, good fit for CLIs/high-perf
-      services.
+      services. `templates/rust/` and `rust-ci-reusable.yml` shipped:
+      `cargo fmt`/`cargo clippy` (lint), `cargo-llvm-cov` coverage
+      threshold (test), `cargo audit` (security) — all installed as
+      prebuilt binaries via `taiki-e/install-action` rather than compiled
+      from source. `release.yml` bumps `Cargo.toml`'s `version` to match
+      the computed tag, since that's genuinely where a crate's version
+      lives (unlike Go). All four deploy targets (`ghcr`/`vps`/`fly`/`k8s`/`ecs`)
+      included from the start.
 - [ ] **.NET / C#** — large enterprise/Azure footprint; lowest priority
       unless a consumer's stack actually needs it.
 

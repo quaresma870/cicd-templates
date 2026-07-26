@@ -132,6 +132,12 @@ Same as Python — see the table above.
 
 ---
 
+## Rust template
+
+Same as Python — see the table above.
+
+---
+
 ## Node.js template
 
 Same as Python, plus optionally:

@@ -3,6 +3,41 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.19.0
+- feat: **Rust template** — `templates/rust/ci.yml`, `templates/rust/release.yml`,
+  and `.github/workflows/rust-ci-reusable.yml` shipped, using the same
+  Lint → Test → Security → Build → Deploy shape as every other language
+  template, with all four current deploy targets (`ghcr`/`vps`/`fly`/`k8s`/`ecs`).
+  - **Lint:** `cargo fmt --all -- --check` + `cargo clippy --all-targets
+    --all-features -- -D warnings`.
+  - **Test:** `cargo llvm-cov` (source-based coverage via the
+    `llvm-tools-preview` rustup component) enforces the same 70% default
+    line-coverage threshold as `python`/`nodejs`/`go`/`java`, in one
+    command (`--fail-under-lines`) rather than a separate parse-and-check
+    step.
+  - **Security:** `cargo audit` — the official Rust security-advisory
+    scanner.
+  - **Build/Deploy:** identical Docker + SBOM + cosign + SLSA attestation
+    + VPS/Fly.io/Kubernetes/AWS ECS deploy pattern as every other
+    Docker-building template.
+  - `release.yml` bumps `Cargo.toml`'s `version` (and, if present,
+    `Cargo.lock`'s matching entry) to match the computed tag — a crate's
+    version genuinely lives in `Cargo.toml`, same reasoning as Java's
+    `pom.xml` bump. Uses a plain `sed` substitution rather than
+    `cargo set-version` (from the `cargo-edit` crate, not part of a
+    stock Rust install) to avoid an extra from-source compile in CI.
+  - Uses `taiki-e/install-action` to install `cargo-llvm-cov`/`cargo-audit`
+    as prebuilt binaries rather than `cargo install` (which compiles from
+    source — several minutes per tool). `dtolnay/rust-toolchain` is
+    pinned to its `stable` branch's current commit rather than a release
+    tag — that action has no version tags at all, `@stable` is itself a
+    branch name selecting the toolchain channel; the pin only protects
+    the action's own code, `rustup` still resolves the actual current
+    stable Rust release at runtime.
+  - `Swatinem/rust-cache`'s SHA confirmed against its peeled `^{}` ref
+    (an annotated tag) before pinning.
+  - README, `docs/secrets-setup.md`, and `ROADMAP.md` updated.
+
 ### v1.18.0
 - feat: **AWS ECS deploy target** — third and last item of `ROADMAP.md`'s
   "Additional deploy targets" section, completing it. All 5 copy-paste
