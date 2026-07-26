@@ -106,6 +106,56 @@ single step without forking this repo. Pick **Option A** if you want full
 ownership of the workflow file; pick **Option B** if you'd rather not
 maintain your own copy and are fine with this repo's defaults.
 
+### Option C — `python-package-ci-reusable.yml`, for installable CLI/library packages
+
+The four reusable workflows above all assume the same shape: build a Docker
+image, push it to GHCR, deploy it to a VPS. That's exactly right for a
+deployed web service, and a genuine mismatch for a package that's built as a
+wheel/sdist and installed directly — no Dockerfile, no registry, no deploy
+target at all. [`python-package-ci-reusable.yml`](.github/workflows/python-package-ci-reusable.yml)
+covers only the part that's actually identical across a whole portfolio of
+CLI tools: lint, build the wheel/sdist, verify the metadata, and smoke-install
+the built wheel into a clean venv. It deliberately does **not** run the
+package's own test suite or any bespoke integration testing (mock servers,
+live clusters, synthetic captures, etc.) — that's usually the most valuable,
+most repo-specific part of a given package's CI, and doesn't generalize into
+a shared template without losing what makes it useful. Keep that in the
+calling repo's own workflow, as a separate job alongside this one:
+
+```yaml
+# .github/workflows/ci.yml in YOUR repo
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  package-ci:
+    uses: quaresma870/cicd-templates/.github/workflows/python-package-ci-reusable.yml@main
+    with:
+      python_version: "3.11"
+      cli_command: your-cli-name
+      package_extras: "[pcap]"   # optional — omit if the package has none
+
+  test:
+    runs-on: ubuntu-latest
+    needs: package-ci
+    steps:
+      - uses: actions/checkout@v7
+      # ... your own test suite ...
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: package-ci
+    steps:
+      - uses: actions/checkout@v7
+      # ... your own bespoke integration testing (mock servers, live
+      #     clusters, synthetic captures, whatever this specific repo
+      #     actually needs) ...
+```
+
 ---
 
 ## Common features (all templates)
@@ -212,7 +262,8 @@ cicd-templates/
     ├── python-ci-reusable.yml          # Callable alternative to templates/python/ci.yml — see "How to use"
     ├── nodejs-ci-reusable.yml          # Callable alternative to templates/nodejs/ci.yml — see "How to use"
     ├── docker-only-ci-reusable.yml     # Callable alternative to templates/docker-only/ci.yml — see "How to use"
-    └── generic-ci-reusable.yml         # Callable alternative to templates/generic/ci.yml — see "How to use"
+    ├── generic-ci-reusable.yml         # Callable alternative to templates/generic/ci.yml — see "How to use"
+    └── python-package-ci-reusable.yml  # Lint + build wheel only — for installable CLI/library packages, see "How to use" Option C
 ```
 
 This repo's own `dependabot.yml` bumps are auto-merged by
