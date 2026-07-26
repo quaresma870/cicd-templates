@@ -88,10 +88,11 @@ jobs:
     with:
       python_version: "3.12"
       image_name: my-app
-      deploy_target: ghcr     # ghcr | vps | both | none
+      deploy_target: ghcr     # ghcr | vps | fly | both | none
     secrets:
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
       # VPS_HOST / VPS_USER / VPS_SSH_KEY / VPS_PORT — only if deploy_target includes vps
+      # FLY_API_TOKEN — only if deploy_target is fly
 ```
 
 Same shape for Node.js — swap the `uses:` line for `nodejs-ci-reusable.yml@main`
@@ -227,12 +228,13 @@ gh attestation verify oci://ghcr.io/YOUR_ORG/YOUR_IMAGE:latest --owner YOUR_ORG
 
 ## Deploy targets
 
-All templates support two deploy targets:
+All templates support:
 
 | Target | How |
 |--------|-----|
 | **GHCR** | Push Docker image to `ghcr.io/<owner>/<app>` |
 | **VPS SSH** | SSH into server, pull image, restart via `docker compose` |
+| **Fly.io** | `flyctl deploy --remote-only` — builds from your Dockerfile on Fly's own remote builder |
 
 See [docs/deploy-targets.md](docs/deploy-targets.md) for setup instructions.
 
@@ -251,6 +253,7 @@ Quick reference — secrets common to all deploy templates:
 | `VPS_USER` | SSH user on VPS |
 | `VPS_SSH_KEY` | Private SSH key (PEM format) |
 | `VPS_PORT` | SSH port (default `22`) |
+| `FLY_API_TOKEN` | Only if `deploy_target` is `fly` |
 
 ---
 

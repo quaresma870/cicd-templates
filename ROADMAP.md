@@ -57,7 +57,11 @@ Currently every template supports `ghcr` and `vps` (SSH + docker compose).
 Candidates to add as new `deploy_target` values, across the relevant
 templates and reusable workflows:
 
-- [ ] **Fly.io** — simplest to configure (no cluster to manage).
+- [x] **Fly.io** — simplest to configure (no cluster to manage). Ships as
+      a `deploy-fly` job across all 5 templates + 6 reusable workflows,
+      using `flyctl deploy --remote-only` (builds from the Dockerfile on
+      Fly's own remote builder, not the GHCR-pushed image — Fly.io has no
+      clean native way to auth to a *private* GHCR image at deploy time).
 - [ ] **Kubernetes** (kubectl apply / Helm upgrade) — most requested /
       most generic of the three; needs a kubeconfig secret convention.
 - [ ] **AWS ECS** — needs a decision on OIDC federation vs. static AWS

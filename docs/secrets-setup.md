@@ -17,6 +17,7 @@ Go to: **Settings → Secrets and variables → Actions → New repository secre
 | `VPS_USER` | SSH user on the server | `deploy` |
 | `VPS_SSH_KEY` | Private SSH key — PEM format, full content | `-----BEGIN OPENSSH...` |
 | `VPS_PORT` | SSH port | `22` |
+| `FLY_API_TOKEN` | Only if `deploy_target` is `fly` — flyctl auth token | `fm2_xxx...` |
 
 ### Generating a deploy SSH key
 
@@ -36,6 +37,19 @@ cat ~/.ssh/deploy_key
 1. Go to **GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)**
 2. Generate new token with scopes: `write:packages`, `read:packages`, `delete:packages`
 3. Paste the token as `GHCR_TOKEN` secret
+
+### Deploying to Fly.io
+
+The `fly` deploy target needs a `fly.toml` in the repo root — run `fly launch`
+locally once to generate it (this also creates the Fly app itself). Then:
+
+```bash
+fly tokens create deploy -x 999999h   # or: flyctl auth token
+```
+
+Paste the resulting token as the `FLY_API_TOKEN` secret. Unlike `ghcr`/`vps`,
+the `deploy-fly` job builds the image itself on Fly's remote builder straight
+from the Dockerfile — it doesn't reuse the image already pushed to GHCR.
 
 ---
 

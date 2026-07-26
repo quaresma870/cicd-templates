@@ -43,6 +43,9 @@
 # for how this was confirmed.
 #
 # Stages: Lint Dockerfile → Security Scan → Build (+ SBOM + cosign sign + SLSA attestation) → Deploy
+#
+# Deploying to Fly.io requires a fly.toml in the repo root (run `fly launch`
+# once locally to generate it) — the deploy-fly job below doesn't create one.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Docker CI/CD (reusable)
@@ -61,7 +64,7 @@ on:
       deploy_target:
         description: "Where to deploy after a successful build on main"
         type: string
-        default: "ghcr"   # ghcr | vps | both | none
+        default: "ghcr"   # ghcr | vps | fly | both | none
       deploy_path:
         description: "Path on the VPS where docker-compose.yml lives (required if deploy_target includes vps)"
         type: string
@@ -78,6 +81,9 @@ on:
       VPS_SSH_KEY:
         required: false
       VPS_PORT:
+        required: false
+      FLY_API_TOKEN:
+        description: "flyctl auth token — required only if deploy_target includes fly"
         required: false
 
 permissions:
@@ -260,3 +266,32 @@ jobs:
             echo "  Waited ${ELAPSED}s..."
           done
           echo "Application is healthy!"
+
+  # ── Deploy → Fly.io ──────────────────────────────────────────────────────────
+  deploy-fly:
+    timeout-minutes: 15
+    name: Deploy to Fly.io
+    runs-on: ubuntu-latest
+    # Depends on `build` for gating (only deploy once the CI jobs all pass) —
+    # Fly.io builds its own image from the Dockerfile via its remote builder
+    # rather than reusing the one `build` pushed to GHCR, since Fly.io has no
+    # clean native way to pull a private GHCR image at deploy time.
+    needs: build
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      (inputs.deploy_target == 'fly')
+    environment:
+      name: production
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
