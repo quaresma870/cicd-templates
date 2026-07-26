@@ -15,7 +15,7 @@ themselves aren't strictly sequential — pick whatever's most useful next.
       `CHANGELOG.md` section (not the whole file). Closes the gap where
       versions exist only as CHANGELOG headers with no matching git tag
       or Release today.
-- [ ] `docs/branch-protection.md` — guide for consumers on required status
+- [x] `docs/branch-protection.md` — guide for consumers on required status
       checks / branch protection for `main`, since every template assumes
       deploy-only-on-`main` semantics.
 - [ ] CodeQL on this repo's own shell scripts / workflow files (distinct
