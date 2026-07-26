@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.10.0
+- feat: **CodeQL for this repo itself** (`.github/workflows/codeql.yml`) —
+  uses CodeQL's `actions` language (GA since April 2025), a purpose-built
+  static analysis for GitHub Actions workflow files: script injection via
+  untrusted inputs in `run:` steps, missing/overly-broad permissions,
+  dangerous `pull_request_target` use, etc. A direct match for what this
+  repo actually contains, so this replaced the more generic "scan shell
+  scripts" idea from `ROADMAP.md` once researched. Distinct from
+  `templates/security/ci.yml`, which scans *consumers'* repos, not this
+  one. README badge added; project-structure listing in the README
+  brought back in sync with the actual `.github/workflows/` contents
+  (`dependency-review.yml`, `scorecard.yml`, `release.yml` were missing
+  from it). This closes out `ROADMAP.md`'s "Repo process & supply-chain
+  polish" section — next up is new language templates.
+
 ### v1.9.0
 - docs: **`docs/branch-protection.md`** — guide for repos that adopt a
   template on which status checks to require (and which to deliberately

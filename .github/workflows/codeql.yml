@@ -1,0 +1,57 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# CodeQL — "actions" language
+#
+# This repo is entirely GitHub Actions workflow YAML (templates/, reusable
+# workflows), so the generic "scan shell scripts" idea from ROADMAP.md turned
+# into something more precise once researched: CodeQL has a purpose-built
+# `actions` language (GA since April 2025) that statically analyzes workflow
+# files themselves — script injection via untrusted inputs in `run:` steps,
+# missing/overly-broad permissions, dangerous use of pull_request_target,
+# etc. That's a direct match for what this repo actually contains, so this
+# uses that instead of a generic shell/YAML scan.
+#
+# Distinct from templates/security/ci.yml, which is a scanning pipeline
+# *consumers* bolt onto their own repos — this one scans cicd-templates
+# itself.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "30 2 * * 6"   # weekly, Saturday 02:30 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (actions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      security-events: write   # to upload results to code scanning
+      contents: read
+      actions: read            # required for the actions language extractor
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@adfda868f108ac4222129de456ea554034a27db7 # v4
+        with:
+          languages: actions
+          build-mode: none
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@adfda868f108ac4222129de456ea554034a27db7 # v4
+        with:
+          category: "/language:actions"
