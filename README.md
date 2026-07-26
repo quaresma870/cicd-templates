@@ -18,19 +18,21 @@ A collection of production-ready GitHub Actions CI/CD pipeline templates coverin
 | [`nodejs/`](templates/nodejs/) | Node.js / TypeScript / Express / Next.js | Lint (+ type check) → Test → Security → Build → Deploy |
 | [`go/`](templates/go/) | Go | Lint → Test → Security → Build → Deploy |
 | [`java/`](templates/java/) | Java / Maven / Spring Boot | Lint → Test → Security → Build → Deploy |
+| [`rust/`](templates/rust/) | Rust | Lint → Test → Security → Build → Deploy |
 | [`generic/`](templates/generic/) | Any language | Validate → Test → Security → Build → Deploy |
 | [`docker-only/`](templates/docker-only/) | Docker images | Lint → Security → Build → Push → Deploy |
 | [`ansible/`](templates/ansible/) | Ansible playbooks | Lint → Syntax → Security → Dry Run → Deploy |
 | [`terraform/`](templates/terraform/) | Terraform IaC | Format → Validate → Security → Plan → Apply |
 | [`security/`](templates/security/) | Any repo | Secrets → Deps → SAST → Container → SBOM |
 
-`python/`, `nodejs/`, `go/`, `java/`, `generic/`, `docker-only/`,
+`python/`, `nodejs/`, `go/`, `java/`, `rust/`, `generic/`, `docker-only/`,
 `ansible/`, and `terraform/` each include a `release.yml` for automated
 semantic-version tagging from conventional commits — for `go/`, the git
 tag it creates *is* the actual Go module version (`go get module@v1.2.3`
-resolves straight to it), not just a changelog convenience; for `java/`,
-it bumps `pom.xml`'s `<version>` to match, since that's genuinely where a
-Maven artifact's version lives. **`security/` deliberately doesn't** — it's a scanning pipeline you bolt onto an existing repo, not a
+resolves straight to it), not just a changelog convenience; for `java/`
+and `rust/`, it bumps `pom.xml`'s `<version>` / `Cargo.toml`'s `version`
+to match, since that's genuinely where a Maven artifact's or crate's
+version lives. **`security/` deliberately doesn't** — it's a scanning pipeline you bolt onto an existing repo, not a
 deployable artifact with its own version number; there's nothing
 meaningful for a release workflow to tag or publish. If you do want to
 track when the scanning configuration itself changed, a plain git tag on
@@ -60,12 +62,13 @@ to re-copy and re-diff by hand.
 
 ### Option B — Call (stays in sync, less editable)
 
-Available for `python`, `nodejs`, `go`, `java`, `docker-only`, and
+Available for `python`, `nodejs`, `go`, `java`, `rust`, `docker-only`, and
 `generic` so far
 ([`python-ci-reusable.yml`](.github/workflows/python-ci-reusable.yml),
 [`nodejs-ci-reusable.yml`](.github/workflows/nodejs-ci-reusable.yml),
 [`go-ci-reusable.yml`](.github/workflows/go-ci-reusable.yml),
 [`java-ci-reusable.yml`](.github/workflows/java-ci-reusable.yml),
+[`rust-ci-reusable.yml`](.github/workflows/rust-ci-reusable.yml),
 [`docker-only-ci-reusable.yml`](.github/workflows/docker-only-ci-reusable.yml),
 [`generic-ci-reusable.yml`](.github/workflows/generic-ci-reusable.yml)
 — GitHub requires reusable workflows to live directly in `.github/workflows/`,
@@ -102,7 +105,10 @@ and `python_version` for `node_version`. TypeScript-first: set `type_check: fals
 if this is a plain JavaScript project (no `tsconfig.json`) — it defaults to
 `true`. Same for Go — `go-ci-reusable.yml@main`
 and `go_version` (e.g. `"1.26"`) — and for Java — `java-ci-reusable.yml@main`
-and `java_version` (e.g. `"25"`). For `docker-only`, drop the
+and `java_version` (e.g. `"25"`). For Rust — `rust-ci-reusable.yml@main` —
+drop the language-version input entirely too; it always uses the `stable`
+toolchain channel, the same convention `dtolnay/rust-toolchain` itself
+uses, rather than pinning a specific Rust release. For `docker-only`, drop the
 language-version input entirely (there isn't one) and optionally set
 `platform` for multi-arch builds. For `generic`, there's no language runtime
 to configure either — instead pass `setup_command` (installs your stack's
@@ -281,6 +287,7 @@ cicd-templates/
 │   ├── nodejs/{ci,release}.yml
 │   ├── go/{ci,release}.yml
 │   ├── java/{ci,release}.yml
+│   ├── rust/{ci,release}.yml
 │   ├── generic/{ci,release}.yml
 │   ├── docker-only/{ci,release}.yml
 │   ├── ansible/{ci,release}.yml
@@ -302,6 +309,7 @@ cicd-templates/
     ├── nodejs-ci-reusable.yml          # Callable alternative to templates/nodejs/ci.yml — see "How to use"
     ├── go-ci-reusable.yml              # Callable alternative to templates/go/ci.yml — see "How to use"
     ├── java-ci-reusable.yml            # Callable alternative to templates/java/ci.yml — see "How to use"
+    ├── rust-ci-reusable.yml            # Callable alternative to templates/rust/ci.yml — see "How to use"
     ├── docker-only-ci-reusable.yml     # Callable alternative to templates/docker-only/ci.yml — see "How to use"
     ├── generic-ci-reusable.yml         # Callable alternative to templates/generic/ci.yml — see "How to use"
     └── python-package-ci-reusable.yml  # Lint + build wheel only — for installable CLI/library packages, see "How to use" Option C

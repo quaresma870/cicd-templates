@@ -1,0 +1,108 @@
+##########################################################################
+# Release — Rust
+# Triggers after CI passes on main. Bumps Cargo.toml's version to match
+# the git tag (a crate's version genuinely lives in Cargo.toml — `cargo
+# publish` and any consumer's Cargo.lock resolve it from there, not from
+# the tag directly, unlike Go modules), commits that bump, then tags and
+# creates the GitHub Release.
+#
+# Uses a plain sed substitution rather than `cargo set-version` (from the
+# cargo-edit crate) so this works with a stock project — cargo-edit isn't
+# part of a default Rust install and compiling it from source in CI adds
+# several minutes. Assumes a single [package] version = "..." line in the
+# root Cargo.toml; a workspace with multiple independently-versioned
+# member crates needs a different approach.
+#
+# Conventional commit format:
+#   feat: new feature         → minor version bump
+#   fix: bug fix              → patch version bump
+#   feat!: breaking change    → major version bump
+#   docs:/chore: etc.         → no release
+##########################################################################
+
+name: Release (Rust)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Bump Cargo.toml + tag release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0   # full history needed for version calculation
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Configure git bot
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine next version from commits
+        id: next_version
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+          COMMITS=$(git log "${LAST_TAG}..HEAD" --format="%s" 2>/dev/null || git log --format="%s")
+          MAJOR=0; MINOR=0; PATCH=0
+          IFS='.' read -r V_MAJOR V_MINOR V_PATCH <<< "${LAST_TAG#v}"
+          while IFS= read -r msg; do
+            if echo "$msg" | grep -qE "^feat!:|BREAKING CHANGE:"; then MAJOR=1
+            elif echo "$msg" | grep -qE "^feat:"; then [ $MAJOR -eq 0 ] && MINOR=1
+            elif echo "$msg" | grep -qE "^fix:|^perf:"; then [ $MAJOR -eq 0 ] && [ $MINOR -eq 0 ] && PATCH=1
+            fi
+          done <<< "$COMMITS"
+          if   [ $MAJOR -eq 1 ]; then NEXT="v$((V_MAJOR+1)).0.0"
+          elif [ $MINOR -eq 1 ]; then NEXT="v${V_MAJOR}.$((V_MINOR+1)).0"
+          elif [ $PATCH -eq 1 ]; then NEXT="v${V_MAJOR}.${V_MINOR}.$((V_PATCH+1))"
+          else echo "No releasable commits found."; exit 0; fi
+          echo "next_tag=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Next version: $NEXT"
+
+      - name: Bump Cargo.toml version
+        if: steps.next_version.outputs.next_tag != ''
+        run: |
+          VERSION_NO_V="${{ steps.next_version.outputs.next_tag }}"
+          VERSION_NO_V="${VERSION_NO_V#v}"
+          sed -i "0,/^version = \".*\"/s//version = \"${VERSION_NO_V}\"/" Cargo.toml
+          grep -q "version = \"${VERSION_NO_V}\"" Cargo.toml || {
+            echo "::error::Failed to bump Cargo.toml — no 'version = \"...\"' line found under [package]"
+            exit 1
+          }
+          # Keep Cargo.lock's own copy of this crate's version in sync, if present.
+          if [ -f Cargo.lock ]; then
+            PACKAGE_NAME=$(sed -n '0,/^name = "\(.*\)"/s//\1/p' Cargo.toml | head -1)
+            sed -i "/^name = \"${PACKAGE_NAME}\"/,/^version = \".*\"/{s/^version = \".*\"/version = \"${VERSION_NO_V}\"/}" Cargo.lock
+          fi
+          git add Cargo.toml Cargo.lock 2>/dev/null || git add Cargo.toml
+          git commit -m "chore: bump Cargo.toml to ${VERSION_NO_V} [skip ci]"
+          git push
+
+      - name: Create GitHub Release
+        if: steps.next_version.outputs.next_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          TAG=${{ steps.next_version.outputs.next_tag }}
+          git tag "$TAG"
+          git push origin "$TAG"
+          NOTES=$(git log "$(git describe --tags --abbrev=0 HEAD^)..HEAD" --format="- %s" 2>/dev/null || echo "Initial release")
+          gh release create "$TAG" --title "Release $TAG" --notes "$NOTES"
