@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.18.0
+- feat: **AWS ECS deploy target** — third and last item of `ROADMAP.md`'s
+  "Additional deploy targets" section, completing it. All 5 copy-paste
+  templates (`python`, `nodejs`, `go`, `java`, `generic`) and all 6
+  reusable workflows gain an `ecs` option alongside
+  `ghcr | vps | fly | k8s | both | none`, plus a new `deploy-ecs` job.
+  Uses **static AWS access keys** (`AWS_ACCESS_KEY_ID` /
+  `AWS_SECRET_ACCESS_KEY`), not OIDC federation — a deliberate choice, not
+  a placeholder.
+  `deploy-ecs` deliberately only rolls out a new image onto an ECS
+  service + task definition family that must already exist: `aws ecs
+  describe-task-definition` → `aws-actions/amazon-ecs-render-task-definition`
+  patches in the new image → `aws-actions/amazon-ecs-deploy-task-definition`
+  registers the new revision, updates the service, and waits for
+  stability. Same scope limit as `k8s` — doesn't create the cluster,
+  service, or task definition, since that's environment-specific and out
+  of scope.
+  New `AWS_REGION`/`ECS_CLUSTER` variables (required, no sensible
+  default) and `ECS_SERVICE` (defaults to `APP_NAME`/`image_name`).
+  Documented the `repositoryCredentials` prerequisite for task
+  definitions pulling from a private GHCR repo (the default here) — this
+  repo's own build job doesn't touch that field, only the image URI.
+  Both `aws-actions/amazon-ecs-render-task-definition` and
+  `aws-actions/amazon-ecs-deploy-task-definition` are annotated tags —
+  confirmed against their peeled `^{}` refs before pinning.
+  `docs/secrets-setup.md` and `docs/deploy-targets.md` updated. README
+  and `ROADMAP.md` updated.
+
 ### v1.17.0
 - fix(security): **OpenSSF Scorecard remediation for this repo itself**
   (score was 4.8/10 as of the last scan). Fixed what's actually fixable

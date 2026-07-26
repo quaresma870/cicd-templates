@@ -69,8 +69,13 @@ templates and reusable workflows:
       apply/create — that's cluster-specific and out of scope). Kubeconfig
       convention: base64-encoded `KUBE_CONFIG` secret, decoded on the
       runner and deleted afterward.
-- [ ] **AWS ECS** — decided: static AWS access keys (`AWS_ACCESS_KEY_ID` /
-      `AWS_SECRET_ACCESS_KEY`), not OIDC federation. Not yet implemented.
+- [x] **AWS ECS** — static AWS access keys (`AWS_ACCESS_KEY_ID` /
+      `AWS_SECRET_ACCESS_KEY`), not OIDC federation. Ships as a
+      `deploy-ecs` job across all 5 templates + 6 reusable workflows,
+      registering a new task definition revision + updating the service
+      against a cluster/service/task-definition family that must already
+      exist (no cluster/service/task-def creation — same scope limit as
+      `k8s`). This closes out the "Additional deploy targets" section.
 
 ## 4. Testing infrastructure
 

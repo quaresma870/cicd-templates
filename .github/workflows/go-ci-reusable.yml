@@ -45,6 +45,11 @@
 # Deploying to Kubernetes assumes a Deployment already exists in the cluster
 # with a container name matching image_name — deploy-k8s only rolls out a new
 # image (`kubectl set image`), it doesn't apply manifests or create resources.
+#
+# Deploying to AWS ECS assumes an ECS service + task definition family
+# already exist (family/container name matching image_name) — deploy-ecs
+# only registers a new task definition revision with the new image and
+# updates the service, it doesn't create the cluster/service/task definition.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Go CI/CD (reusable)
@@ -67,7 +72,7 @@ on:
       deploy_target:
         description: "Where to deploy after a successful build on main"
         type: string
-        default: "ghcr"   # ghcr | vps | fly | k8s | both | none
+        default: "ghcr"   # ghcr | vps | fly | k8s | ecs | both | none
       deploy_path:
         description: "Path on the VPS where docker-compose.yml lives (required if deploy_target includes vps)"
         type: string
@@ -76,6 +81,18 @@ on:
         description: "Kubernetes namespace to deploy into (required if deploy_target includes k8s)"
         type: string
         default: "default"
+      aws_region:
+        description: "AWS region for ECS (required if deploy_target includes ecs)"
+        type: string
+        default: ""
+      ecs_cluster:
+        description: "ECS cluster name (required if deploy_target includes ecs)"
+        type: string
+        default: ""
+      ecs_service:
+        description: "ECS service name (defaults to image_name if unset, required if deploy_target includes ecs)"
+        type: string
+        default: ""
       coverage_threshold:
         description: "Minimum test coverage percentage required to pass"
         type: number
@@ -98,6 +115,12 @@ on:
         required: false
       KUBE_CONFIG:
         description: "Base64-encoded kubeconfig — required only if deploy_target includes k8s"
+        required: false
+      AWS_ACCESS_KEY_ID:
+        description: "AWS access key — required only if deploy_target includes ecs"
+        required: false
+      AWS_SECRET_ACCESS_KEY:
+        description: "AWS secret key — required only if deploy_target includes ecs"
         required: false
 
 permissions:
@@ -388,3 +411,49 @@ jobs:
       - name: Clean up kubeconfig
         if: always()
         run: rm -f "$HOME/.kube/config"
+
+  # ── Deploy → AWS ECS ─────────────────────────────────────────────────────────
+  deploy-ecs:
+    timeout-minutes: 15
+    name: Deploy to AWS ECS
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      inputs.deploy_target == 'ecs'
+    environment:
+      name: production
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ inputs.aws_region }}
+      - name: Download current task definition
+        env:
+          FAMILY: ${{ env.IMAGE_NAME }}
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "$FAMILY" \
+            --query taskDefinition \
+            --output json > task-definition.json
+      - name: Render new image into task definition
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@138c24f321fdbdf7edee4a685519d253cae2cdea # v1.9.0
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.IMAGE_NAME }}
+          image: ${{ needs.build.outputs.image_full }}
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@c465972ecbd160473f22e683363b422a5412a3de # v2.6.3
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ inputs.ecs_service || env.IMAGE_NAME }}
+          cluster: ${{ inputs.ecs_cluster }}
+          wait-for-service-stability: true

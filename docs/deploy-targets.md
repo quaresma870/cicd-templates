@@ -1,7 +1,7 @@
 # Deploy Targets
 
 All templates support **GHCR** (GitHub Container Registry), **VPS via SSH**,
-**Fly.io**, and **Kubernetes**.
+**Fly.io**, **Kubernetes**, and **AWS ECS**.
 
 ---
 
@@ -169,6 +169,52 @@ Like `fly`, `k8s` is always selected on its own — it isn't folded into
 
 ---
 
+## AWS ECS
+
+`deploy_target: ecs` registers a new revision of an existing ECS task
+definition family with the new image, then updates the service and waits
+for it to stabilize — it does **not** create the cluster, service, or task
+definition. Same scope limit as `k8s`: provisioning (VPC, cluster, service,
+task definition, IAM roles) is environment-specific and assumed already
+done; rolling out a new image onto an existing service is the one part
+this repo's pipeline can own.
+
+Authenticates with **static AWS access keys**, not OIDC federation — a
+deliberate choice for this repo, not a placeholder pending a future change.
+
+### Prerequisites
+
+1. An ECS cluster, service, and task definition family already set up, with
+   a container name matching `APP_NAME` (or `image_name` for the reusable
+   workflows) — the task definition family name must also match `APP_NAME`.
+2. An IAM user with `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` secrets,
+   scoped to just what `deploy-ecs` needs — see
+   [secrets-setup.md](secrets-setup.md#deploying-to-aws-ecs).
+3. `AWS_REGION` and `ECS_CLUSTER` variables (both required); `ECS_SERVICE`
+   defaults to `APP_NAME` if unset.
+4. If pulling from a private GHCR repository (the default for every
+   template here), the task definition's container needs
+   `repositoryCredentials` already configured pointing at a Secrets
+   Manager secret with a GHCR PAT — `deploy-ecs` only overrides the image
+   URI, it doesn't touch that field.
+
+### How deploy works
+
+1. `aws-actions/configure-aws-credentials` authenticates with the static
+   keys
+2. `aws ecs describe-task-definition --task-definition <family>` downloads
+   the current task definition as JSON
+3. `aws-actions/amazon-ecs-render-task-definition` patches in the new image
+   URI for the matching container name
+4. `aws-actions/amazon-ecs-deploy-task-definition` registers the rendered
+   definition as a new revision, updates the service, and (with
+   `wait-for-service-stability: true`) blocks until the rollout stabilizes
+
+Like `fly`/`k8s`, `ecs` is always selected on its own — it isn't folded
+into `deploy_target: both`.
+
+---
+
 ## Choosing a target
 
 | Scenario | Recommended target |
@@ -177,5 +223,6 @@ Like `fly`, `k8s` is always selected on its own — it isn't folded into
 | Self-hosted server | VPS SSH |
 | Both image registry + deploy | Both (default) |
 | No server to manage | Fly.io |
-| Already running a cluster | Kubernetes |
+| Already running a Kubernetes cluster | Kubernetes |
+| Already running on ECS | AWS ECS |
 | Testing / no server yet | `none` (via `workflow_dispatch` input) |
