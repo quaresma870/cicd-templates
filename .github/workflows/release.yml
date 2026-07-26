@@ -1,0 +1,61 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Release — for THIS repo (cicd-templates itself), not to be confused with
+# templates/*/release.yml, which are copy-paste examples for repos that
+# adopt a template.
+#
+# Triggers on pushing a `vX.Y.Z` tag. Creates a GitHub Release whose body
+# is exactly that version's CHANGELOG.md section — not the whole file —
+# so CHANGELOG.md stays the running history and each Release only shows
+# what changed in that version.
+#
+# To cut a release: add the version's entry to CHANGELOG.md (as already
+# done for every version so far), then:
+#   git tag v1.6.0 && git push origin v1.6.0
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release from CHANGELOG
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Extract this version's CHANGELOG section
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v heading="### v${VERSION}" '
+            $0 == heading { found=1; next }
+            found && /^### v/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            echo "::error::No '### v${VERSION}' section found in CHANGELOG.md for tag ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
+          echo "Extracted release notes for ${GITHUB_REF_NAME}:"
+          cat release-notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file release-notes.md
