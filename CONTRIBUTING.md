@@ -21,11 +21,22 @@ Thanks for considering a contribution to these CI/CD templates.
    table in the README) unless the stack genuinely doesn't need a stage.
 2. Pin third-party actions to the exact commit SHA, never a floating tag
    like `@main`, `@latest`, or even a version tag like `@v7` on its own —
-   tags are mutable. Resolve the SHA for the tag you actually want with
-   `git ls-remote <repo-url> refs/tags/<tag>` (don't guess or hallucinate a
-   SHA), then pin it with the tag kept as a trailing comment for
-   readability: `uses: owner/repo@<sha> # v7`. Dependabot understands this
-   format and keeps the SHA current automatically.
+   tags are mutable. Resolve the SHA with
+   `git ls-remote <repo-url> refs/tags/<tag>` (don't guess or hallucinate
+   one) — but **always check for a second line ending in `^{}`** in that
+   output first: an annotated tag returns *both* the tag object's own SHA
+   and, on the `^{}` line, the real commit SHA it points to, and only the
+   `^{}` one is correct. Using the bare tag-object SHA isn't caught by
+   yamllint/actionlint and often still works for `actions/checkout`-style
+   resolution, but it silently breaks anything that verifies the pin
+   against the repo's real commit history — confirmed the hard way when
+   `ossf/scorecard-action`'s own backend rejected exactly this as an
+   "imposter commit" (see CHANGELOG). If `git ls-remote ... refs/tags/<tag>`
+   returns only one line, the tag is lightweight and that line's SHA is
+   already the real commit — nothing more to do. Pin with the tag kept as
+   a trailing comment for readability: `uses: owner/repo@<sha> # v7`.
+   Dependabot understands this format and keeps the SHA current
+   automatically.
 3. Every job's first step should be `step-security/harden-runner` with
    `egress-policy: audit` (see any existing job for the exact block) —
    monitors network egress without blocking anything, so it's always safe

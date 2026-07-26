@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.12.0
+- fix(security): **7 SHA pins were actually the annotated-tag object SHA,
+  not the real commit SHA** — `actions/attest-build-provenance`,
+  `aquasecurity/trivy-action`, `aws-actions/configure-aws-credentials`,
+  `gitleaks/gitleaks-action`, `golangci/golangci-lint-action`,
+  `ossf/scorecard-action`, and `sigstore/cosign-installer`. Root cause:
+  the original SHA-resolution script only checked the peeled `^{}` ref as
+  a fallback when the plain `refs/tags/<tag>` query came back empty, but
+  an annotated tag's plain query is never empty — it returns the tag
+  *object's* SHA, so the fallback never ran. Confirmed on real CI: this
+  repo's own `scorecard.yml` started failing with `ossf/scorecard-action`
+  rejecting its own pin as an "imposter commit" (its backend verifies the
+  pinned SHA against the repo's actual commit history, which a tag-object
+  SHA fails). Audited and fixed all 31 SHA pins across the repo — the
+  other 24 were already correct. `CONTRIBUTING.md`'s SHA-pinning guidance
+  now explicitly calls out checking for the `^{}` line.
+
 ### v1.11.0
 - feat: **Go template** — `templates/go/ci.yml`, `templates/go/release.yml`,
   and the reusable `go-ci-reusable.yml`, completing the same
