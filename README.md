@@ -15,7 +15,7 @@ A collection of production-ready GitHub Actions CI/CD pipeline templates coverin
 | Template | Stack | Stages |
 |----------|-------|--------|
 | [`python/`](templates/python/) | Python / FastAPI / Flask | Lint → Test → Security → Build → Deploy |
-| [`nodejs/`](templates/nodejs/) | Node.js / Express / Next.js | Lint → Test → Security → Build → Deploy |
+| [`nodejs/`](templates/nodejs/) | Node.js / TypeScript / Express / Next.js | Lint (+ type check) → Test → Security → Build → Deploy |
 | [`go/`](templates/go/) | Go | Lint → Test → Security → Build → Deploy |
 | [`java/`](templates/java/) | Java / Maven / Spring Boot | Lint → Test → Security → Build → Deploy |
 | [`generic/`](templates/generic/) | Any language | Validate → Test → Security → Build → Deploy |
@@ -95,7 +95,9 @@ jobs:
 ```
 
 Same shape for Node.js — swap the `uses:` line for `nodejs-ci-reusable.yml@main`
-and `python_version` for `node_version`. Same for Go — `go-ci-reusable.yml@main`
+and `python_version` for `node_version`. TypeScript-first: set `type_check: false`
+if this is a plain JavaScript project (no `tsconfig.json`) — it defaults to
+`true`. Same for Go — `go-ci-reusable.yml@main`
 and `go_version` (e.g. `"1.26"`) — and for Java — `java-ci-reusable.yml@main`
 and `java_version` (e.g. `"25"`). For `docker-only`, drop the
 language-version input entirely (there isn't one) and optionally set

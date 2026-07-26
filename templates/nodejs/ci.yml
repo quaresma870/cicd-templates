@@ -1,6 +1,10 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Node.js CI/CD Template
-# Stages: Lint → Test → Security Scan → Build → Deploy (GHCR + VPS SSH)
+# Stages: Lint (+ type check) → Test → Security Scan → Build → Deploy (GHCR + VPS SSH)
+#
+# TypeScript-first: the lint job runs `tsc --noEmit` alongside your own
+# `npm run lint` — assumes a tsconfig.json in the repo root. Plain
+# JavaScript project? Delete that one step; everything else is unchanged.
 #
 # Required secrets:
 #   GHCR_TOKEN       — GitHub token with packages:write scope
@@ -68,6 +72,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
       - run: npm run lint
 
   # ── Test ────────────────────────────────────────────────────────────────────

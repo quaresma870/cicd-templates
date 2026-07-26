@@ -26,6 +26,7 @@
 #       with:
 #         node_version: "22"
 #         image_name: my-app
+#         type_check: false   # plain JavaScript project — omit to keep the default (true)
 #         deploy_target: vps
 #         deploy_path: /opt/my-app
 #       secrets: inherit   # or pass each secret explicitly, see below
@@ -37,7 +38,7 @@
 # at dispatch time, before any job even starts — see python-ci-reusable.yml
 # for how this was confirmed.
 #
-# Stages: Lint → Test → Security Scan → Build (+ SBOM + cosign sign + SLSA attestation) → Deploy
+# Stages: Lint (+ type check) → Test → Security Scan → Build (+ SBOM + cosign sign + SLSA attestation) → Deploy
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Node.js CI/CD (reusable)
@@ -53,6 +54,10 @@ on:
         description: "JSON array of Node.js versions the lint/test jobs run a matrix against"
         type: string
         default: '["22"]'
+      type_check:
+        description: "Run `tsc --noEmit` in the lint job — set false for a plain JavaScript project (no tsconfig.json)"
+        type: boolean
+        default: true
       image_name:
         description: "Docker image name (without registry/owner prefix)"
         type: string
@@ -112,6 +117,9 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      - name: Type check
+        if: inputs.type_check
+        run: npx tsc --noEmit
       - run: npm run lint
 
   # ── Test ────────────────────────────────────────────────────────────────────
