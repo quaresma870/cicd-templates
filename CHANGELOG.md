@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.7.0
+- feat: **real GitHub Releases for this repo**
+  (`.github/workflows/release.yml`) — pushing a `vX.Y.Z` tag now creates a
+  GitHub Release whose body is exactly that version's `CHANGELOG.md`
+  section, not the whole file. `CHANGELOG.md` keeps the full running
+  history; each Release only shows what changed in that version.
+- fix: **`dependency-review-action`'s `continue-on-error` removed** — was
+  added temporarily after the check hard-errored on first run because
+  "Dependency graph" wasn't enabled for this repo; now confirmed on, so
+  the check is blocking again as originally intended.
+
 ### v1.6.0
 - feat: **`dependency-review-action` on this repo's own PRs**
   (`.github/workflows/dependency-review.yml`) — blocks merging a PR that
