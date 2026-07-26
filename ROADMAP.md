@@ -69,8 +69,8 @@ templates and reusable workflows:
       apply/create — that's cluster-specific and out of scope). Kubeconfig
       convention: base64-encoded `KUBE_CONFIG` secret, decoded on the
       runner and deleted afterward.
-- [ ] **AWS ECS** — needs a decision on OIDC federation vs. static AWS
-      access keys before implementation.
+- [ ] **AWS ECS** — decided: static AWS access keys (`AWS_ACCESS_KEY_ID` /
+      `AWS_SECRET_ACCESS_KEY`), not OIDC federation. Not yet implemented.
 
 ## 4. Testing infrastructure
 
@@ -79,3 +79,28 @@ templates and reusable workflows:
       be verified locally in every environment (needs working
       Docker-in-Docker); would need to be validated against a real GitHub
       Actions run and iterated from there if it fails.
+
+## 5. OpenSSF Scorecard follow-up (this repo's own score)
+
+Score was 4.8/10 as of the last scan. Fixed what's fixable via committed
+code (see CHANGELOG v1.17.0): least-privilege `permissions:` blocks on
+`validate.yml`/`dependabot-auto-merge.yml`/`release.yml`, `LICENSE`,
+`SECURITY.md`. What's left needs a repo-owner decision or action, not a
+PR:
+
+- [ ] **Branch-Protection** (currently 0/10) — `main` isn't a protected
+      branch. `docs/branch-protection.md` already documents the
+      recommended settings for repos that *adopt* a template; applying
+      that same guidance to `main` here is the fix, but it's a real repo
+      setting (Settings → Branches), not something to flip on silently —
+      especially since requiring PR-review-approval would change how
+      PRs on this repo get merged going forward.
+- [ ] **Code-Review** (currently 0/10, "0/22 approved changesets") — tied
+      to the above: no PR has had a human/bot approval before merging.
+      Requesting a Copilot review per PR going forward (or requiring
+      review in branch protection) is the lever, once decided.
+- Not actionable at all: **CII-Best-Practices** (requires the repo owner
+  to personally register on bestpractices.dev — an external account
+  action), **Maintained** (repo age, ages out on its own),
+  **Contributors** (single-maintainer repo), **Fuzzing**/**Packaging**
+  (don't apply to a YAML template collection).
