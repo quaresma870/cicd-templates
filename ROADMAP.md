@@ -25,9 +25,11 @@ themselves aren't strictly sequential — pick whatever's most useful next.
 
 ## 2. New language templates
 
-- [ ] **Go** — natural fit for this repo's Docker-centric model: static
+- [x] **Go** — natural fit for this repo's Docker-centric model: static
       binary, trivial multi-stage Dockerfile, fast builds. Also the de
-      facto language of cloud-native tooling.
+      facto language of cloud-native tooling. Both `templates/go/` and
+      `go-ci-reusable.yml` shipped, using `golangci-lint` (lint) and
+      `govulncheck` (the official Go vulnerability scanner, security scan).
 - [ ] **Java** (Spring Boot, Gradle or Maven) — still dominant in
       enterprise/banking backends; biggest gap in current stack coverage.
 - [ ] **TypeScript-first update to `templates/nodejs/`** — not a new
