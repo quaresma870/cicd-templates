@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.16.0
+- feat: **Kubernetes deploy target** — second item of `ROADMAP.md`'s
+  "Additional deploy targets" section. Same reach as Fly.io: all 5
+  copy-paste templates (`python`, `nodejs`, `go`, `java`, `generic`) and
+  all 6 reusable workflows gain a `k8s` option alongside
+  `ghcr | vps | fly | both | none`, plus a new `deploy-k8s` job.
+  `deploy-k8s` deliberately only rolls out a new image tag — it runs
+  `kubectl set image deployment/<app> <app>=<new-image> -n <namespace>`
+  then waits on `kubectl rollout status`. It doesn't apply manifests or
+  create resources; that's cluster/environment-specific (Helm, raw
+  manifests, Kustomize, GitOps) and out of scope, same way `vps` assumes
+  `docker-compose.yml` is already on the server rather than the pipeline
+  creating it. Kubeconfig comes in as a base64-encoded `KUBE_CONFIG`
+  secret, decoded to `~/.kube/config` on the runner and deleted
+  afterward regardless of outcome. New `KUBE_NAMESPACE` variable
+  (`kube_namespace` input for reusable workflows) defaults to `default`.
+  `azure/setup-kubectl`'s SHA confirmed against its peeled `^{}` ref
+  (v5 is an annotated tag) before pinning.
+  `docs/secrets-setup.md` and `docs/deploy-targets.md` document the new
+  secret/variable and the "Deployment must already exist" prerequisite.
+  README and `ROADMAP.md` updated.
+
 ### v1.15.0
 - feat: **Fly.io deploy target** — first item of `ROADMAP.md`'s
   "Additional deploy targets" section. All 5 copy-paste templates

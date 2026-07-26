@@ -1,7 +1,7 @@
 # Deploy Targets
 
 All templates support **GHCR** (GitHub Container Registry), **VPS via SSH**,
-and **Fly.io**.
+**Fly.io**, and **Kubernetes**.
 
 ---
 
@@ -131,6 +131,44 @@ selected on its own, since it doesn't share GHCR's pushed image the way
 
 ---
 
+## Kubernetes
+
+`deploy_target: k8s` runs `kubectl set image` against a Deployment that
+already exists in your cluster, then waits on `kubectl rollout status` —
+it does **not** apply manifests, create a Deployment, or manage any other
+cluster resources. That's a deliberate scope limit: provisioning is
+cluster/environment-specific (Helm chart, raw manifests, Kustomize, GitOps
+tooling), while rolling out a new image tag onto an existing Deployment is
+the one part that's the same regardless of how you provisioned it — same
+shape as `vps` assuming `docker-compose.yml` is already on the server rather
+than the pipeline creating it.
+
+### Prerequisites
+
+1. A Deployment already running in the cluster, with a container name
+   matching `APP_NAME` (or `image_name` for the reusable workflows).
+2. A `KUBE_CONFIG` secret (base64-encoded kubeconfig) — see
+   [secrets-setup.md](secrets-setup.md#deploying-to-kubernetes). A
+   service-account-scoped kubeconfig limited to `get`/`patch` on that one
+   Deployment's namespace is strongly recommended over a full admin config.
+3. Optionally, a `KUBE_NAMESPACE` variable (or `kube_namespace` input) if
+   the Deployment isn't in the `default` namespace.
+
+### How deploy works
+
+1. `azure/setup-kubectl` installs the `kubectl` CLI
+2. The kubeconfig secret is base64-decoded to `~/.kube/config`
+3. `kubectl set image deployment/<app> <app>=<new-image> -n <namespace>`
+   triggers the rollout
+4. `kubectl rollout status ... --timeout=180s` waits for it to finish (fails
+   the job if the rollout doesn't complete in time)
+5. The kubeconfig file is deleted from the runner regardless of outcome
+
+Like `fly`, `k8s` is always selected on its own — it isn't folded into
+`deploy_target: both`.
+
+---
+
 ## Choosing a target
 
 | Scenario | Recommended target |
@@ -139,4 +177,5 @@ selected on its own, since it doesn't share GHCR's pushed image the way
 | Self-hosted server | VPS SSH |
 | Both image registry + deploy | Both (default) |
 | No server to manage | Fly.io |
+| Already running a cluster | Kubernetes |
 | Testing / no server yet | `none` (via `workflow_dispatch` input) |

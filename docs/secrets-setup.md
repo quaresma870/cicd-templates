@@ -18,6 +18,7 @@ Go to: **Settings → Secrets and variables → Actions → New repository secre
 | `VPS_SSH_KEY` | Private SSH key — PEM format, full content | `-----BEGIN OPENSSH...` |
 | `VPS_PORT` | SSH port | `22` |
 | `FLY_API_TOKEN` | Only if `deploy_target` is `fly` — flyctl auth token | `fm2_xxx...` |
+| `KUBE_CONFIG` | Only if `deploy_target` is `k8s` — base64-encoded kubeconfig | (base64 blob) |
 
 ### Generating a deploy SSH key
 
@@ -51,6 +52,24 @@ Paste the resulting token as the `FLY_API_TOKEN` secret. Unlike `ghcr`/`vps`,
 the `deploy-fly` job builds the image itself on Fly's remote builder straight
 from the Dockerfile — it doesn't reuse the image already pushed to GHCR.
 
+### Deploying to Kubernetes
+
+The `k8s` deploy target assumes a Deployment already exists in the cluster —
+`deploy-k8s` only rolls out a new image (`kubectl set image` +
+`kubectl rollout status`), it doesn't apply manifests or create resources.
+The Deployment's container name must match `APP_NAME` (or `image_name` for
+the reusable workflows).
+
+```bash
+# Base64-encode your kubeconfig (a service-account-scoped one, not your
+# personal admin config, is strongly recommended for CI use)
+base64 -w0 ~/.kube/config   # macOS: base64 -i ~/.kube/config
+```
+
+Paste the output as the `KUBE_CONFIG` secret. Set the `KUBE_NAMESPACE`
+variable if your Deployment isn't in the `default` namespace (or pass
+`kube_namespace` for the reusable workflows).
+
 ---
 
 ## Python template
@@ -64,6 +83,9 @@ from the Dockerfile — it doesn't reuse the image already pushed to GHCR.
 | `VPS_PORT` | Secret | SSH port |
 | `APP_NAME` | Variable | Docker image name (e.g. `my-api`) |
 | `DEPLOY_PATH` | Variable | Path on VPS (e.g. `/opt/my-api`) |
+| `FLY_API_TOKEN` | Secret | Only if `deploy_target` is `fly` |
+| `KUBE_CONFIG` | Secret | Only if `deploy_target` is `k8s` |
+| `KUBE_NAMESPACE` | Variable | Only if `deploy_target` is `k8s` (default: `default`) |
 
 ---
 

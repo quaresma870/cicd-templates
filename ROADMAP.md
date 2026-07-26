@@ -62,8 +62,13 @@ templates and reusable workflows:
       using `flyctl deploy --remote-only` (builds from the Dockerfile on
       Fly's own remote builder, not the GHCR-pushed image — Fly.io has no
       clean native way to auth to a *private* GHCR image at deploy time).
-- [ ] **Kubernetes** (kubectl apply / Helm upgrade) — most requested /
-      most generic of the three; needs a kubeconfig secret convention.
+- [x] **Kubernetes** — most requested / most generic of the three. Ships as
+      a `deploy-k8s` job across all 5 templates + 6 reusable workflows,
+      using `kubectl set image` + `kubectl rollout status` against a
+      Deployment that must already exist in the cluster (no manifest
+      apply/create — that's cluster-specific and out of scope). Kubeconfig
+      convention: base64-encoded `KUBE_CONFIG` secret, decoded on the
+      runner and deleted afterward.
 - [ ] **AWS ECS** — needs a decision on OIDC federation vs. static AWS
       access keys before implementation.
 
