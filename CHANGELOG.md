@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.8.0
+- feat: **`python-package-ci-reusable.yml`** — a new, deliberately leaner
+  reusable workflow for installable Python CLI/library packages (built as a
+  wheel/sdist, no Dockerfile, no registry push, no VPS deploy). The existing
+  four reusable workflows (`python`, `nodejs`, `docker-only`, `generic`) all
+  assume a "build Docker image → push to GHCR → deploy to VPS" shape, which
+  is a real, confirmed mismatch for a portfolio of CLI tools that are never
+  containerized or deployed anywhere at all. This one covers only the
+  genuinely identical part across such a portfolio — lint, build, verify
+  metadata, smoke-install in a clean venv — and deliberately does not run
+  the calling package's own test suite or any bespoke integration testing,
+  since those are usually the most valuable, most repo-specific part of a
+  given package's CI and don't generalize into a shared template without
+  losing what makes them useful. See the README's "How to use" Option C.
+  First validated end-to-end against a real caller (`voipaudit`) before
+  being adopted more broadly.
+
 ### v1.7.0
 - feat: **real GitHub Releases for this repo**
   (`.github/workflows/release.yml`) — pushing a `vX.Y.Z` tag now creates a
