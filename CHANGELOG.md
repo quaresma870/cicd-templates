@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.12.1
+- fix(security): **`github/codeql-action` had the same annotated-tag-object
+  bug as v1.12.0's 7 pins** — missed in that audit because the script's
+  regex only matched two-segment `owner/repo@sha` paths, and
+  `github/codeql-action/init`, `.../analyze`, and `.../upload-sarif` are
+  three-segment (`owner/repo/subpath`) action references. Confirmed the
+  hard way again: `scorecard.yml` kept failing on `main` after v1.12.0
+  merged, this time rejecting `github/codeql-action/upload-sarif`'s pin
+  as an imposter commit. Re-ran the audit with a regex that correctly
+  splits the leading `owner/repo` from any subpath before resolving —
+  every SHA pin in the repo (`codeql.yml`'s two uses plus
+  `scorecard.yml`'s one) now verified against the real peeled commit SHA,
+  zero mismatches.
+
 ### v1.12.0
 - fix(security): **7 SHA pins were actually the annotated-tag object SHA,
   not the real commit SHA** — `actions/attest-build-provenance`,
