@@ -320,4 +320,4 @@ for what's planned next.
 
 ## License
 
-MIT
+[MIT](LICENSE)

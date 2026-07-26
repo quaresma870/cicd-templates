@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.17.0
+- fix(security): **OpenSSF Scorecard remediation for this repo itself**
+  (score was 4.8/10 as of the last scan). Fixed what's actually fixable
+  via code:
+  - `validate.yml` had no `permissions:` block at all — added
+    `contents: read` at the workflow level.
+  - `dependabot-auto-merge.yml` and `release.yml` granted `contents:
+    write` (plus `pull-requests: write` for the former) at the
+    *workflow* level — Scorecard's Token-Permissions check specifically
+    penalizes that even when a workflow has only one job, since it's not
+    scoped against future jobs being added. Moved both to job-level
+    permissions with a `contents: read` workflow-level default.
+  - Added `LICENSE` (MIT) — the README already claimed an MIT badge, but
+    no actual license file existed.
+  - Added `SECURITY.md` — points reporters to GitHub's private
+    vulnerability reporting instead of a public issue.
+  - Not fixable via code, left as-is: `Maintained` (repo age; ages out
+    naturally), `Contributors` (single-maintainer repo), `Fuzzing` /
+    `Packaging` (not applicable to a YAML template collection),
+    `CII-Best-Practices` (requires manually registering on
+    bestpractices.dev — a human action, not something a commit can do),
+    `Branch-Protection` and `Code-Review` (real repository settings
+    changes, not committed code — see `docs/branch-protection.md`, which
+    already documents the recommended configuration for repos that
+    *adopt* a template; this repo hasn't applied that same guidance to
+    itself yet, and doing so is a deliberate decision left to the repo
+    owner rather than something to silently flip on).
+
 ### v1.16.0
 - feat: **Kubernetes deploy target** — second item of `ROADMAP.md`'s
   "Additional deploy targets" section. Same reach as Fly.io: all 5
