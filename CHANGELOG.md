@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.11.0
+- feat: **Go template** — `templates/go/ci.yml`, `templates/go/release.yml`,
+  and the reusable `go-ci-reusable.yml`, completing the same
+  Lint → Test → Security → Build → Deploy shape every other language
+  template follows. Lint uses `golangci-lint` (v2.12 via
+  `golangci-lint-action`), security scan uses `govulncheck` — the official
+  Go vulnerability scanner from the `golang` org, checked against actual
+  call graphs rather than just declared dependencies. Test enforces a
+  coverage threshold computed from `go tool cover`, same 70% default as
+  the other templates. `release.yml` is tag-based like `ansible`'s, but
+  for a more fundamental reason: Go modules are versioned directly by git
+  tag (`go get module@v1.2.3` resolves straight to it), so the tag +
+  Release this workflow creates *is* the actual release artifact, not
+  just a changelog convenience — includes a commented-out reminder for
+  the `/v2`+ import-path convention Go modules require for major
+  versions. README, `docs/secrets-setup.md` (identical secrets to
+  `python/`), and `ROADMAP.md` updated.
+
 ### v1.10.0
 - feat: **CodeQL for this repo itself** (`.github/workflows/codeql.yml`) —
   uses CodeQL's `actions` language (GA since April 2025), a purpose-built
