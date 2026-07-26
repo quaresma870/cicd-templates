@@ -138,6 +138,12 @@ Same as Python — see the table above.
 
 ---
 
+## .NET template
+
+Same as Python — see the table above.
+
+---
+
 ## Node.js template
 
 Same as Python, plus optionally:

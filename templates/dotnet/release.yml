@@ -1,0 +1,109 @@
+##########################################################################
+# Release — .NET
+# Triggers after CI passes on main. Bumps every .csproj's <Version> to
+# match the git tag (a .NET project's version genuinely lives in the
+# .csproj — `dotnet pack`/NuGet publish and any consumer resolve it from
+# there, not from the tag directly, unlike Go modules), commits that
+# bump, then tags and creates the GitHub Release.
+#
+# Bumps EVERY .csproj under the repo that has a <Version> element, via a
+# plain sed substitution — works for the common "one main project"
+# layout without requiring any extra tooling. A solution with multiple
+# independently-versioned projects needs a different approach (this
+# would bump all of them to the same version).
+#
+# Conventional commit format:
+#   feat: new feature         → minor version bump
+#   fix: bug fix              → patch version bump
+#   feat!: breaking change    → major version bump
+#   docs:/chore: etc.         → no release
+##########################################################################
+
+name: Release (.NET)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Bump .csproj version(s) + tag release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0   # full history needed for version calculation
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Configure git bot
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine next version from commits
+        id: next_version
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+          COMMITS=$(git log "${LAST_TAG}..HEAD" --format="%s" 2>/dev/null || git log --format="%s")
+          MAJOR=0; MINOR=0; PATCH=0
+          IFS='.' read -r V_MAJOR V_MINOR V_PATCH <<< "${LAST_TAG#v}"
+          while IFS= read -r msg; do
+            if echo "$msg" | grep -qE "^feat!:|BREAKING CHANGE:"; then MAJOR=1
+            elif echo "$msg" | grep -qE "^feat:"; then [ $MAJOR -eq 0 ] && MINOR=1
+            elif echo "$msg" | grep -qE "^fix:|^perf:"; then [ $MAJOR -eq 0 ] && [ $MINOR -eq 0 ] && PATCH=1
+            fi
+          done <<< "$COMMITS"
+          if   [ $MAJOR -eq 1 ]; then NEXT="v$((V_MAJOR+1)).0.0"
+          elif [ $MINOR -eq 1 ]; then NEXT="v${V_MAJOR}.$((V_MINOR+1)).0"
+          elif [ $PATCH -eq 1 ]; then NEXT="v${V_MAJOR}.${V_MINOR}.$((V_PATCH+1))"
+          else echo "No releasable commits found."; exit 0; fi
+          echo "next_tag=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Next version: $NEXT"
+
+      - name: Bump .csproj version(s)
+        if: steps.next_version.outputs.next_tag != ''
+        run: |
+          VERSION_NO_V="${{ steps.next_version.outputs.next_tag }}"
+          VERSION_NO_V="${VERSION_NO_V#v}"
+          FOUND=0
+          while IFS= read -r -d '' f; do
+            if grep -q '<Version>' "$f"; then
+              sed -i "s|<Version>.*</Version>|<Version>${VERSION_NO_V}</Version>|" "$f"
+              FOUND=1
+              echo "Bumped: $f"
+            fi
+          done < <(find . -name "*.csproj" -not -path "*/bin/*" -not -path "*/obj/*" -print0)
+          if [ "$FOUND" -eq 0 ]; then
+            echo "::error::No <Version>...</Version> element found in any .csproj file"
+            exit 1
+          fi
+          git add -A -- '*.csproj'
+          git commit -m "chore: bump .csproj version to ${VERSION_NO_V} [skip ci]"
+          git push
+
+      - name: Create GitHub Release
+        if: steps.next_version.outputs.next_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          TAG=${{ steps.next_version.outputs.next_tag }}
+          git tag "$TAG"
+          git push origin "$TAG"
+          NOTES=$(git log "$(git describe --tags --abbrev=0 HEAD^)..HEAD" --format="- %s" 2>/dev/null || echo "Initial release")
+          gh release create "$TAG" --title "Release $TAG" --notes "$NOTES"
