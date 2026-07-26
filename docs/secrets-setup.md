@@ -19,6 +19,8 @@ Go to: **Settings → Secrets and variables → Actions → New repository secre
 | `VPS_PORT` | SSH port | `22` |
 | `FLY_API_TOKEN` | Only if `deploy_target` is `fly` — flyctl auth token | `fm2_xxx...` |
 | `KUBE_CONFIG` | Only if `deploy_target` is `k8s` — base64-encoded kubeconfig | (base64 blob) |
+| `AWS_ACCESS_KEY_ID` | Only if `deploy_target` is `ecs` | `AKIA...` |
+| `AWS_SECRET_ACCESS_KEY` | Only if `deploy_target` is `ecs` | (secret key) |
 
 ### Generating a deploy SSH key
 
@@ -70,6 +72,30 @@ Paste the output as the `KUBE_CONFIG` secret. Set the `KUBE_NAMESPACE`
 variable if your Deployment isn't in the `default` namespace (or pass
 `kube_namespace` for the reusable workflows).
 
+### Deploying to AWS ECS
+
+The `ecs` deploy target assumes an ECS service + task definition family
+already exist — `deploy-ecs` only registers a new task definition revision
+with the new image and updates the service, it doesn't create the
+cluster, service, or task definition. The task definition's container name
+must match `APP_NAME` (or `image_name` for the reusable workflows), and its
+family name must also match `APP_NAME`.
+
+Uses **static AWS access keys**, not OIDC federation — create an IAM user
+scoped to just `ecs:DescribeTaskDefinition`, `ecs:RegisterTaskDefinition`,
+and `ecs:UpdateService` on the specific cluster/service (plus
+`iam:PassRole` for the task's execution/task roles), then generate an
+access key for it. Paste the key ID and secret as `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY`. Set the `AWS_REGION` and `ECS_CLUSTER` variables
+(both required, no sensible default); `ECS_SERVICE` defaults to `APP_NAME`
+if unset.
+
+If the task definition pulls the image from a private GHCR repository (the
+default for every template here), its container definition needs
+`repositoryCredentials` pointing at a Secrets Manager secret holding a
+GHCR PAT — set that up once on the task definition itself; `deploy-ecs`
+only overrides the image URI, it doesn't touch `repositoryCredentials`.
+
 ---
 
 ## Python template
@@ -86,6 +112,11 @@ variable if your Deployment isn't in the `default` namespace (or pass
 | `FLY_API_TOKEN` | Secret | Only if `deploy_target` is `fly` |
 | `KUBE_CONFIG` | Secret | Only if `deploy_target` is `k8s` |
 | `KUBE_NAMESPACE` | Variable | Only if `deploy_target` is `k8s` (default: `default`) |
+| `AWS_ACCESS_KEY_ID` | Secret | Only if `deploy_target` is `ecs` |
+| `AWS_SECRET_ACCESS_KEY` | Secret | Only if `deploy_target` is `ecs` |
+| `AWS_REGION` | Variable | Only if `deploy_target` is `ecs` |
+| `ECS_CLUSTER` | Variable | Only if `deploy_target` is `ecs` |
+| `ECS_SERVICE` | Variable | Only if `deploy_target` is `ecs` (default: `APP_NAME`) |
 
 ---
 
