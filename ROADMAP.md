@@ -38,10 +38,12 @@ themselves aren't strictly sequential — pick whatever's most useful next.
       to already be declared in a stock `pom.xml`. `release.yml` bumps
       `pom.xml`'s `<version>` to match the computed tag, since that's
       genuinely where a Maven artifact's version lives (unlike Go).
-- [ ] **TypeScript-first update to `templates/nodejs/`** — not a new
+- [x] **TypeScript-first update to `templates/nodejs/`** — not a new
       stack, but TypeScript is now the most-used language on GitHub by
-      contributors (Octoverse 2025). Add a `tsc --noEmit` type-check step
-      to the lint stage and default examples to `.ts`.
+      contributors (Octoverse 2025). Lint job now runs `tsc --noEmit`
+      alongside `npm run lint`; the reusable workflow exposes a
+      `type_check` input (default `true`) since a plain-JS caller can't
+      delete a job's step the way a copy-paste template user can.
 - [ ] **Rust** — smaller current usage but the most-admired language on
       Stack Overflow for years running and moving into real production
       in 2026; minimal container images, good fit for CLIs/high-perf

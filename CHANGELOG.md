@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.14.0
+- feat: **TypeScript-first update to the Node.js template** — TypeScript
+  is now the most-used language on GitHub by contributors (Octoverse
+  2025), so `templates/nodejs/ci.yml`'s lint job now runs `tsc --noEmit`
+  alongside your own `npm run lint` (assumes a `tsconfig.json` in the
+  repo root — delete the one step for a plain JavaScript project).
+  `nodejs-ci-reusable.yml` exposes this as a `type_check` input
+  (default `true`, set `false` to skip) since a reusable-workflow caller
+  can't delete a step the way a copy-paste template user can. README
+  templates table, Option B docs, and `ROADMAP.md` updated. This closes
+  out `ROADMAP.md`'s "New language templates" section except Rust and
+  .NET/C#, both explicitly lower priority.
+
 ### v1.13.0
 - feat: **Java template (Maven)** — `templates/java/ci.yml`,
   `templates/java/release.yml`, and the reusable `java-ci-reusable.yml`,
