@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.9.0
+- docs: **`docs/branch-protection.md`** — guide for repos that adopt a
+  template on which status checks to require (and which to deliberately
+  *not* require, like VPS deploy jobs that only run on `main`), since
+  every template's "deploy only on `main`" assumption is only actually
+  enforced if `main` is protected. Covers required-PR-review, Code Owners
+  review, the `dependabot-auto-merge.yml` + branch-protection interaction,
+  and optional tag protection for the new `release.yml` pattern.
+
 ### v1.8.0
 - feat: **`python-package-ci-reusable.yml`** — a new, deliberately leaner
   reusable workflow for installable Python CLI/library packages (built as a

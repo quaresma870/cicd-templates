@@ -240,6 +240,15 @@ Quick reference — secrets common to all deploy templates:
 
 ---
 
+## Branch protection
+
+Every template assumes deploy-only-on-`main`, which is only actually
+enforced if `main` is protected. See
+[docs/branch-protection.md](docs/branch-protection.md) for which status
+checks to require and why.
+
+---
+
 ## Project structure
 
 ```
@@ -255,7 +264,8 @@ cicd-templates/
 ├── docs/
 │   ├── how-to-use.md
 │   ├── secrets-setup.md
-│   └── deploy-targets.md
+│   ├── deploy-targets.md
+│   └── branch-protection.md
 └── .github/workflows/
     ├── validate.yml                    # Validates all template YAMLs on every push
     ├── dependabot-auto-merge.yml       # Auto-merges Dependabot's own minor/patch PRs once CI passes
