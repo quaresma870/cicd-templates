@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.13.0
+- feat: **Java template (Maven)** — `templates/java/ci.yml`,
+  `templates/java/release.yml`, and the reusable `java-ci-reusable.yml`,
+  completing the same Lint → Test → Security → Build → Deploy shape every
+  other language template follows.
+  - **Lint:** Checkstyle (`mvn checkstyle:check`, Sun's default ruleset
+    unless `pom.xml` overrides it).
+  - **Test:** JaCoCo coverage, invoked via direct plugin-goal coordinates
+    (`prepare-agent` + `test` + `report`) so it works without requiring
+    `pom.xml` to already declare the plugin; a small Python step parses
+    `jacoco.xml` for the line-coverage percentage and enforces the same
+    70% default threshold as `python`/`nodejs`/`go`.
+  - **Security:** OWASP Dependency-Check
+    (`mvn org.owasp:dependency-check-maven:check`) — also invoked via
+    full coordinates, no `pom.xml` config required.
+  - **Build/Deploy:** identical Docker + SBOM + cosign + SLSA attestation
+    + VPS-deploy pattern as every other build-a-Docker-image template.
+  - `release.yml` bumps `pom.xml`'s `<version>` to match the computed
+    tag before creating the Release — unlike Go, a Maven artifact's
+    version genuinely lives in the POM, not just the tag.
+  - Defaults to Java 25 (current LTS, released September 2025) via
+    Eclipse Temurin.
+- chore: re-verified every SHA pin in the repo (33 total, including this
+  template's 2 new `actions/setup-java` references) against `git
+  ls-remote`'s explicit peeled `^{}` ref — the query shape that v1.12.0
+  and v1.12.1 each had to fix in turn. Zero mismatches this time.
+- README, `docs/secrets-setup.md`, and `ROADMAP.md` updated.
+
 ### v1.12.1
 - fix(security): **`github/codeql-action` had the same annotated-tag-object
   bug as v1.12.0's 7 pins** — missed in that audit because the script's
