@@ -18,8 +18,10 @@ themselves aren't strictly sequential — pick whatever's most useful next.
 - [x] `docs/branch-protection.md` — guide for consumers on required status
       checks / branch protection for `main`, since every template assumes
       deploy-only-on-`main` semantics.
-- [ ] CodeQL on this repo's own shell scripts / workflow files (distinct
-      from `templates/security/ci.yml`, which scans *consumers'* repos).
+- [x] CodeQL on this repo's own workflow files (distinct from
+      `templates/security/ci.yml`, which scans *consumers'* repos) — uses
+      CodeQL's purpose-built `actions` language (GA since April 2025)
+      rather than a generic shell/YAML scan.
 
 ## 2. New language templates
 

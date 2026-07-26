@@ -1,6 +1,7 @@
 # ⚙️ CI/CD Templates
 
 [![Validate Templates](https://github.com/quaresma870/cicd-templates/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/quaresma870/cicd-templates/actions/workflows/validate.yml)
+[![CodeQL](https://github.com/quaresma870/cicd-templates/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/quaresma870/cicd-templates/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/quaresma870/cicd-templates/badge)](https://securityscorecards.dev/viewer/?uri=github.com/quaresma870/cicd-templates)
 ![Node.js](https://img.shields.io/badge/GitHub%20Actions-Node.js%2024-brightgreen?logo=nodedotjs&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -268,7 +269,11 @@ cicd-templates/
 │   └── branch-protection.md
 └── .github/workflows/
     ├── validate.yml                    # Validates all template YAMLs on every push
+    ├── codeql.yml                      # CodeQL "actions" language analysis of this repo's own workflows
+    ├── scorecard.yml                   # OpenSSF Scorecard for this repo itself
+    ├── dependency-review.yml           # Blocks PRs introducing a known-vulnerable dependency
     ├── dependabot-auto-merge.yml       # Auto-merges Dependabot's own minor/patch PRs once CI passes
+    ├── release.yml                     # vX.Y.Z tag push → GitHub Release from that version's CHANGELOG section
     ├── python-ci-reusable.yml          # Callable alternative to templates/python/ci.yml — see "How to use"
     ├── nodejs-ci-reusable.yml          # Callable alternative to templates/nodejs/ci.yml — see "How to use"
     ├── docker-only-ci-reusable.yml     # Callable alternative to templates/docker-only/ci.yml — see "How to use"
