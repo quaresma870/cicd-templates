@@ -3,6 +3,37 @@
 All notable changes to this project are documented here. See the
 [README](README.md) for current features and usage.
 
+### v1.20.0
+- feat: **.NET template** — `templates/dotnet/ci.yml`, `templates/dotnet/release.yml`,
+  and `.github/workflows/dotnet-ci-reusable.yml` shipped, closing out
+  `ROADMAP.md`'s "New language templates" section. Same Lint → Test →
+  Security → Build → Deploy shape as every other language template, with
+  all four current deploy targets (`ghcr`/`vps`/`fly`/`k8s`/`ecs`).
+  - **Lint:** `dotnet format --verify-no-changes` — part of the SDK
+    itself since .NET 6, no extra tool install needed.
+  - **Test:** `dotnet test --collect:"XPlat Code Coverage"` (via the
+    `coverlet.collector` package every `dotnet new xunit`/`nunit`/`mstest`
+    project already references by default), then the same
+    parse-Cobertura-XML-and-enforce-threshold approach as Java's
+    `jacoco.xml` handling — 70% default line coverage.
+  - **Security:** `dotnet list package --vulnerable --include-transitive`
+    — built into the SDK since .NET 5, no extra tool needed; wrapped with
+    a grep-based check since the command itself doesn't fail the build
+    on findings.
+  - **Build/Deploy:** identical Docker + SBOM + cosign + SLSA attestation
+    + VPS/Fly.io/Kubernetes/AWS ECS deploy pattern as every other
+    Docker-building template.
+  - `release.yml` bumps every `.csproj`'s `<Version>` element to match
+    the computed tag — a .NET project's version genuinely lives there,
+    same reasoning as Java's `pom.xml` / Rust's `Cargo.toml` bump.
+    Verified the `sed` logic against a real `.csproj` locally before
+    shipping. Assumes the common "one main project" layout; a solution
+    with multiple independently-versioned projects needs a different
+    approach.
+  - Defaults to .NET 10 (current LTS, released November 2025) via
+    `actions/setup-dotnet`.
+  - README, `docs/secrets-setup.md`, and `ROADMAP.md` updated.
+
 ### v1.19.0
 - feat: **Rust template** — `templates/rust/ci.yml`, `templates/rust/release.yml`,
   and `.github/workflows/rust-ci-reusable.yml` shipped, using the same

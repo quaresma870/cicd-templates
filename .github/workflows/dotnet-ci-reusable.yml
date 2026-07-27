@@ -1,0 +1,470 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# .NET CI/CD Template — REUSABLE (workflow_call) version
+#
+# This is an ALTERNATIVE to templates/dotnet/ci.yml, not a replacement.
+# Copying ci.yml gives you a workflow that's fully yours to edit; calling
+# this one means a fix or new best practice landing here reaches every
+# caller automatically, at the cost of being less visible/editable from
+# the consuming repo. See the README's "How to use" section for the
+# tradeoffs and pick whichever fits.
+#
+# NOTE on file location: GitHub Actions requires reusable workflows to live
+# directly in .github/workflows/ — subdirectories aren't supported, so this
+# can't live alongside the copy-paste template at templates/dotnet/ci.yml
+# the way you might expect. This is the one exception to that convention.
+#
+# Usage from a consuming repo's own workflow:
+#
+#   permissions:
+#     contents: read
+#     id-token: write    # REQUIRED — see note below
+#     packages: write    # only if deploy_target includes 'ghcr'
+#
+#   jobs:
+#     ci:
+#       uses: quaresma870/cicd-templates/.github/workflows/dotnet-ci-reusable.yml@main
+#       with:
+#         dotnet_version: "10.0.x"
+#         image_name: my-app
+#         deploy_target: vps
+#         deploy_path: /opt/my-app
+#       secrets: inherit   # or pass each secret explicitly, see below
+#
+# ⚠️ The permissions: block above is NOT optional decoration — a calling
+# workflow's permissions are a CEILING on what the called workflow's jobs
+# can be granted. Omitting id-token: write on the CALLER causes the build
+# job's cosign signing step to fail with an opaque "workflow file issue"
+# at dispatch time, before any job even starts — see python-ci-reusable.yml
+# for how this was confirmed.
+#
+# Stages: Lint → Test → Security Scan → Build (+ SBOM + cosign sign + SLSA attestation) → Deploy
+#
+# Deploying to Fly.io requires a fly.toml in the repo root (run `fly launch`
+# once locally to generate it) — the deploy-fly job below doesn't create one.
+#
+# Deploying to Kubernetes assumes a Deployment already exists in the cluster
+# with a container name matching image_name — deploy-k8s only rolls out a new
+# image (`kubectl set image`), it doesn't apply manifests or create resources.
+#
+# Deploying to AWS ECS assumes an ECS service + task definition family
+# already exist (family/container name matching image_name) — deploy-ecs
+# only registers a new task definition revision with the new image and
+# updates the service, it doesn't create the cluster/service/task definition.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: .NET CI/CD (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      dotnet_version:
+        description: "dotnet-version passed to actions/setup-dotnet"
+        type: string
+        default: "10.0.x"
+      image_name:
+        description: "Docker image name (without registry/owner prefix)"
+        type: string
+        default: "app"
+      deploy_target:
+        description: "Where to deploy after a successful build on main"
+        type: string
+        default: "ghcr"   # ghcr | vps | fly | k8s | ecs | both | none
+      deploy_path:
+        description: "Path on the VPS where docker-compose.yml lives (required if deploy_target includes vps)"
+        type: string
+        default: ""
+      kube_namespace:
+        description: "Kubernetes namespace to deploy into (required if deploy_target includes k8s)"
+        type: string
+        default: "default"
+      aws_region:
+        description: "AWS region for ECS (required if deploy_target includes ecs)"
+        type: string
+        default: ""
+      ecs_cluster:
+        description: "ECS cluster name (required if deploy_target includes ecs)"
+        type: string
+        default: ""
+      ecs_service:
+        description: "ECS service name (defaults to image_name if unset, required if deploy_target includes ecs)"
+        type: string
+        default: ""
+      coverage_threshold:
+        description: "Minimum test coverage percentage required to pass"
+        type: number
+        default: 70
+    secrets:
+      GHCR_TOKEN:
+        description: "GitHub token with packages:write scope — required"
+        required: true
+      VPS_HOST:
+        description: "SSH host — required only if deploy_target includes vps"
+        required: false
+      VPS_USER:
+        required: false
+      VPS_SSH_KEY:
+        required: false
+      VPS_PORT:
+        required: false
+      FLY_API_TOKEN:
+        description: "flyctl auth token — required only if deploy_target includes fly"
+        required: false
+      KUBE_CONFIG:
+        description: "Base64-encoded kubeconfig — required only if deploy_target includes k8s"
+        required: false
+      AWS_ACCESS_KEY_ID:
+        description: "AWS access key — required only if deploy_target includes ecs"
+        required: false
+      AWS_SECRET_ACCESS_KEY:
+        description: "AWS secret key — required only if deploy_target includes ecs"
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: ${{ inputs.dotnet_version }}
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  IMAGE_NAME: ${{ inputs.image_name }}
+  REGISTRY: ghcr.io
+
+jobs:
+  # ── Lint ────────────────────────────────────────────────────────────────────
+  lint:
+    timeout-minutes: 10
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet restore
+      - name: Check formatting
+        run: dotnet format --verify-no-changes --verbosity diagnostic
+
+  # ── Test ────────────────────────────────────────────────────────────────────
+  test:
+    timeout-minutes: 20
+    name: Test
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet restore
+      - name: Run tests with coverage
+        # Requires the coverlet.collector package on the test project —
+        # already referenced by default in projects scaffolded from
+        # `dotnet new xunit`/`nunit`/`mstest`.
+        run: dotnet test --no-restore --collect:"XPlat Code Coverage" --results-directory ./coverage
+      - name: Enforce coverage threshold
+        env:
+          THRESHOLD: ${{ inputs.coverage_threshold }}
+        run: |
+          COVERAGE_FILE=$(find ./coverage -name "coverage.cobertura.xml" | head -1)
+          if [ -z "$COVERAGE_FILE" ]; then
+            echo "::error::No coverage.cobertura.xml found under ./coverage — is the coverlet.collector package referenced by your test project?"
+            exit 1
+          fi
+          COVERAGE=$(python3 - "$COVERAGE_FILE" <<'PYEOF'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          print(round(float(root.get("line-rate")) * 100, 1))
+          PYEOF
+          )
+          echo "Total line coverage: ${COVERAGE}%"
+          awk -v cov="$COVERAGE" -v thr="$THRESHOLD" 'BEGIN { exit (cov+0 < thr+0) }' || {
+            echo "::error::Coverage ${COVERAGE}% is below the ${THRESHOLD}% threshold"
+            exit 1
+          }
+      - name: Upload coverage report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage-report
+          path: ./coverage
+          retention-days: 7
+
+  # ── Security Scan ───────────────────────────────────────────────────────────
+  security:
+    timeout-minutes: 15
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet restore
+      - name: Audit dependencies (dotnet list package --vulnerable)
+        run: |
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerable-report.txt
+          if grep -qi "vulnerable packages" vulnerable-report.txt; then
+            echo "::error::Vulnerable NuGet packages detected — see report above"
+            exit 1
+          fi
+      - name: Upload audit report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: vulnerable-packages-report
+          path: vulnerable-report.txt
+          retention-days: 7
+
+  # ── Build ───────────────────────────────────────────────────────────────────
+  build:
+    timeout-minutes: 30
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    permissions:
+      contents: read
+      id-token: write     # needed for cosign's keyless OIDC signing + SLSA attestation below
+      attestations: write # needed to publish the SLSA provenance attestation below
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      image_full: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=branch
+            type=sha,prefix=sha-
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── SBOM + signing — skipped on PR builds, which don't push an image ──────
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+      - name: Upload SBOM artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom
+          path: sbom.spdx.json
+          retention-days: 90
+      - name: Install Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Sign the image (keyless, via GitHub OIDC)
+        if: github.event_name != 'pull_request'
+        run: |
+          cosign sign --yes \
+            "${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+      - name: Generate SLSA provenance attestation
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # ── Deploy → VPS ────────────────────────────────────────────────────────────
+  deploy-vps:
+    timeout-minutes: 15
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      (inputs.deploy_target == 'vps' || inputs.deploy_target == 'both')
+    # NOTE: environment.url deliberately does NOT reference secrets.VPS_HOST —
+    # the environment block's fields don't support the secrets context, and
+    # doing so fails the entire workflow at dispatch time, before any job
+    # runs, with an opaque "workflow file issue" — confirmed by deliberately
+    # reproducing this exact failure while building this file, not assumed.
+    environment:
+      name: production
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            cd ${{ inputs.deploy_path }}
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ${{ needs.build.outputs.image_full }}
+            docker compose up -d --no-build
+            docker system prune -f
+
+      - name: Wait for application to be healthy
+        run: |
+          echo "Waiting for application health check..."
+          MAX_WAIT=60
+          ELAPSED=0
+          until curl -sf "https://${{ secrets.VPS_HOST }}/health" > /dev/null 2>&1; do
+            if [ $ELAPSED -ge $MAX_WAIT ]; then
+              echo "Health check timed out after ${MAX_WAIT}s — rolling back"
+              exit 1
+            fi
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+            echo "  Waited ${ELAPSED}s..."
+          done
+          echo "Application is healthy!"
+
+  # ── Deploy → Fly.io ──────────────────────────────────────────────────────────
+  deploy-fly:
+    timeout-minutes: 15
+    name: Deploy to Fly.io
+    runs-on: ubuntu-latest
+    # Depends on `build` for gating (only deploy once the CI jobs all pass) —
+    # Fly.io builds its own image from the Dockerfile via its remote builder
+    # rather than reusing the one `build` pushed to GHCR, since Fly.io has no
+    # clean native way to pull a private GHCR image at deploy time.
+    needs: build
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      (inputs.deploy_target == 'fly')
+    environment:
+      name: production
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  # ── Deploy → Kubernetes ──────────────────────────────────────────────────────
+  deploy-k8s:
+    timeout-minutes: 15
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      inputs.deploy_target == 'k8s'
+    environment:
+      name: production
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: Roll out new image
+        env:
+          DEPLOYMENT: ${{ env.IMAGE_NAME }}
+          NAMESPACE: ${{ inputs.kube_namespace }}
+          IMAGE: ${{ needs.build.outputs.image_full }}
+        run: |
+          kubectl set image "deployment/$DEPLOYMENT" "$DEPLOYMENT=$IMAGE" -n "$NAMESPACE"
+          kubectl rollout status "deployment/$DEPLOYMENT" -n "$NAMESPACE" --timeout=180s
+      - name: Clean up kubeconfig
+        if: always()
+        run: rm -f "$HOME/.kube/config"
+
+  # ── Deploy → AWS ECS ─────────────────────────────────────────────────────────
+  deploy-ecs:
+    timeout-minutes: 15
+    name: Deploy to AWS ECS
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      inputs.deploy_target == 'ecs'
+    environment:
+      name: production
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ inputs.aws_region }}
+      - name: Download current task definition
+        env:
+          FAMILY: ${{ env.IMAGE_NAME }}
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "$FAMILY" \
+            --query taskDefinition \
+            --output json > task-definition.json
+      - name: Render new image into task definition
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@138c24f321fdbdf7edee4a685519d253cae2cdea # v1.9.0
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.IMAGE_NAME }}
+          image: ${{ needs.build.outputs.image_full }}
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@c465972ecbd160473f22e683363b422a5412a3de # v2.6.3
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ inputs.ecs_service || env.IMAGE_NAME }}
+          cluster: ${{ inputs.ecs_cluster }}
+          wait-for-service-stability: true

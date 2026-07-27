@@ -55,8 +55,16 @@ themselves aren't strictly sequential — pick whatever's most useful next.
       the computed tag, since that's genuinely where a crate's version
       lives (unlike Go). All four deploy targets (`ghcr`/`vps`/`fly`/`k8s`/`ecs`)
       included from the start.
-- [ ] **.NET / C#** — large enterprise/Azure footprint; lowest priority
-      unless a consumer's stack actually needs it.
+- [x] **.NET / C#** — large enterprise/Azure footprint. `templates/dotnet/`
+      and `dotnet-ci-reusable.yml` shipped: `dotnet format` (lint),
+      `dotnet test` + Cobertura XML coverage threshold (test),
+      `dotnet list package --vulnerable` (security) — all built into the
+      SDK itself since .NET 5/6, no extra tool install needed.
+      `release.yml` bumps every `.csproj`'s `<Version>` to match the
+      computed tag, since that's genuinely where a .NET project's version
+      lives (unlike Go). Defaults to .NET 10 (current LTS). This closes
+      out the "New language templates" section — Go, Java, TypeScript-
+      first Node.js, Rust, and .NET are all shipped.
 
 ## 3. Additional deploy targets
 
